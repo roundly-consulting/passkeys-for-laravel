@@ -6,6 +6,12 @@ namespace RoundlyConsulting\Passkeys\Concerns;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
+use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
+use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\Base64Url;
 
@@ -18,6 +24,8 @@ use RoundlyConsulting\Passkeys\Support\Base64Url;
  * attributes and can be repointed via config or overridden per model.
  *
  * @mixin Model
+ *
+ * @phpstan-require-implements HasPasskeys
  */
 trait InteractsWithPasskeys
 {
@@ -27,6 +35,30 @@ trait InteractsWithPasskeys
     public function passkeys(): MorphMany
     {
         return $this->morphMany(Passkey::class, 'authenticatable');
+    }
+
+    /**
+     * Build creation options for this user's registration ceremony.
+     */
+    public function passkeyRegistrationOptions(?RegistrationOptionsOverrides $overrides = null): CreationOptionsData
+    {
+        return $this->passkeyService()->registrationOptions($this, $overrides);
+    }
+
+    /**
+     * Verify a registration response and store the credential for this user.
+     */
+    public function registerPasskey(RegistrationResponseData $response, ?string $name = null): Passkey
+    {
+        return $this->passkeyService()->register($this, $response, $name);
+    }
+
+    /**
+     * Build request options scoped to this user's stored credentials.
+     */
+    public function passkeyAuthenticationOptions(): RequestOptionsData
+    {
+        return $this->passkeyService()->authenticationOptions($this);
     }
 
     public function passkeyUserHandle(): string
@@ -66,5 +98,10 @@ trait InteractsWithPasskeys
         $value = config('passkeys.'.$key);
 
         return is_string($value) && $value !== '' ? $value : $default;
+    }
+
+    private function passkeyService(): PasskeyService
+    {
+        return app(PasskeyService::class);
     }
 }

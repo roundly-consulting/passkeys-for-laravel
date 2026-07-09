@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\Base64Url;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
@@ -55,4 +59,29 @@ it('falls back to the key when the name attribute is missing', function (): void
 
     expect($user->passkeyUserName())->toBe((string) $user->getKey())
         ->and($user->passkeyDisplayName())->toBe((string) $user->getKey());
+});
+
+it('builds registration options through the user verb', function (): void {
+    Passkeys::fake();
+
+    expect($this->user->passkeyRegistrationOptions())->toBeInstanceOf(CreationOptionsData::class);
+});
+
+it('builds authentication options through the user verb', function (): void {
+    Passkeys::fake();
+
+    expect($this->user->passkeyAuthenticationOptions())->toBeInstanceOf(RequestOptionsData::class);
+});
+
+it('registers a passkey through the user verb, delegating to the service', function (): void {
+    $fake = Passkeys::fake();
+
+    $response = new RegistrationResponseData(rawId: 'raw', clientDataJson: '{}', attestationObject: 'att');
+
+    $passkey = $this->user->registerPasskey($response, 'Phone');
+
+    expect($passkey->name)->toBe('Phone')
+        ->and($passkey->authenticatable->is($this->user))->toBeTrue();
+
+    $fake->assertRegisteredFor($this->user);
 });
