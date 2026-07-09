@@ -64,6 +64,8 @@ final class GenerateRegistrationOptionsAction
             attestation: $attestation,
             userVerification: $userVerification,
             excludeCredentials: $this->excludeCredentials($user),
+            residentKey: $overrides->residentKey ?? $this->config->residentKey,
+            authenticatorAttachment: $overrides->authenticatorAttachment,
         );
     }
 

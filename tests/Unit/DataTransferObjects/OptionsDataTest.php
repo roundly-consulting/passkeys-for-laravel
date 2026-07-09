@@ -6,8 +6,31 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CredentialDescriptor;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
+use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Support\Base64Url;
+
+function creationOptions(
+    ResidentKey $residentKey = ResidentKey::Required,
+    ?AuthenticatorAttachment $attachment = null,
+): CreationOptionsData {
+    return new CreationOptionsData(
+        ceremonyId: 'ceremony',
+        rpId: 'example.com',
+        rpName: 'Example',
+        userHandle: 'user-handle',
+        userName: 'ada@example.com',
+        userDisplayName: 'Ada Lovelace',
+        challenge: 'Y2hhbGxlbmdl',
+        algorithms: [-7],
+        timeoutMs: 60_000,
+        attestation: AttestationConveyance::None,
+        userVerification: UserVerification::Required,
+        residentKey: $residentKey,
+        authenticatorAttachment: $attachment,
+    );
+}
 
 it('serialises a credential descriptor with transports', function (): void {
     $descriptor = new CredentialDescriptor(id: 'raw-id', transports: ['internal', 'hybrid']);
@@ -53,6 +76,34 @@ it('serialises creation options to the browser json shape', function (): void {
         ->and($json['publicKey']['attestation'])->toBe('none')
         ->and($json['publicKey']['excludeCredentials'])->toHaveCount(1)
         ->and($json['publicKey']['authenticatorSelection']['userVerification'])->toBe('required');
+});
+
+it('defaults the authenticator selection to resident-key required', function (): void {
+    $selection = creationOptions()->jsonSerialize()['publicKey']['authenticatorSelection'];
+
+    expect($selection)->toBe([
+        'residentKey' => 'required',
+        'requireResidentKey' => true,
+        'userVerification' => 'required',
+    ]);
+});
+
+it('emits an overridden resident key and attachment', function (): void {
+    $selection = creationOptions(ResidentKey::Discouraged, AuthenticatorAttachment::CrossPlatform)
+        ->jsonSerialize()['publicKey']['authenticatorSelection'];
+
+    expect($selection)->toBe([
+        'residentKey' => 'discouraged',
+        'requireResidentKey' => false,
+        'userVerification' => 'required',
+        'authenticatorAttachment' => 'cross-platform',
+    ]);
+});
+
+it('keeps requireResidentKey true only for a required resident key', function (): void {
+    expect(ResidentKey::Required->requireResidentKey())->toBeTrue()
+        ->and(ResidentKey::Preferred->requireResidentKey())->toBeFalse()
+        ->and(ResidentKey::Discouraged->requireResidentKey())->toBeFalse();
 });
 
 it('serialises request options to the browser json shape', function (): void {

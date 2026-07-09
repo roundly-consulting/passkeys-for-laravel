@@ -6,6 +6,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
@@ -23,6 +24,7 @@ it('reads a fully-specified config into typed values', function (): void {
         'sign_count_policy' => 'reject',
         'attestation_trust' => 'basic',
         'reject_unknown_fmt' => true,
+        'resident_key' => 'discouraged',
         'user' => ['handle_column' => 'handle', 'handle_bytes' => 48, 'name_attribute' => 'username', 'display_name_attribute' => 'full_name'],
     ]);
 
@@ -39,6 +41,7 @@ it('reads a fully-specified config into typed values', function (): void {
         ->and($config->challengeBytes)->toBe(64)
         ->and($config->signCountPolicy)->toBe(SignCountPolicy::Reject)
         ->and($config->attestationTrust)->toBe(AttestationTrust::Basic)
+        ->and($config->residentKey)->toBe(ResidentKey::Discouraged)
         ->and($config->rejectUnknownFmt)->toBeTrue()
         ->and($config->userHandleColumn)->toBe('handle')
         ->and($config->userHandleBytes)->toBe(48)
@@ -59,6 +62,7 @@ it('applies sensible defaults for an empty config', function (): void {
         ->and($config->userVerification)->toBe(UserVerification::Required)
         ->and($config->challengeStore)->toBeNull()
         ->and($config->signCountPolicy)->toBe(SignCountPolicy::Flag)
+        ->and($config->residentKey)->toBe(ResidentKey::Required)
         ->and($config->userHandleColumn)->toBe('passkey_user_handle');
 });
 

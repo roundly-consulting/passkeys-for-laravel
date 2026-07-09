@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
+use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
@@ -31,7 +33,16 @@ it('adopts the shared enums-for-laravel helpers on every enum', function (string
     AttestationConveyance::class,
     AttestationTrust::class,
     SignCountPolicy::class,
+    ResidentKey::class,
+    AuthenticatorAttachment::class,
 ]);
+
+it('exposes resident-key and authenticator-attachment cases', function (): void {
+    expect(ResidentKey::from('required'))->toBe(ResidentKey::Required)
+        ->and(ResidentKey::from('discouraged'))->toBe(ResidentKey::Discouraged)
+        ->and(AuthenticatorAttachment::from('platform'))->toBe(AuthenticatorAttachment::Platform)
+        ->and(AuthenticatorAttachment::from('cross-platform'))->toBe(AuthenticatorAttachment::CrossPlatform);
+});
 
 it('resolves user-verification cases from their backed value', function (): void {
     expect(UserVerification::from('required'))->toBe(UserVerification::Required)

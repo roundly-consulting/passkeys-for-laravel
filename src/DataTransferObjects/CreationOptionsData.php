@@ -6,6 +6,8 @@ namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
 use JsonSerializable;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
+use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Support\Base64Url;
 
@@ -34,6 +36,8 @@ final readonly class CreationOptionsData implements JsonSerializable
         public AttestationConveyance $attestation,
         public UserVerification $userVerification,
         public array $excludeCredentials = [],
+        public ResidentKey $residentKey = ResidentKey::Required,
+        public ?AuthenticatorAttachment $authenticatorAttachment = null,
     ) {}
 
     /**
@@ -61,12 +65,26 @@ final readonly class CreationOptionsData implements JsonSerializable
                     static fn (CredentialDescriptor $descriptor): array => $descriptor->toArray(),
                     $this->excludeCredentials,
                 ),
-                'authenticatorSelection' => [
-                    'residentKey' => 'required',
-                    'requireResidentKey' => true,
-                    'userVerification' => $this->userVerification->value,
-                ],
+                'authenticatorSelection' => $this->authenticatorSelection(),
             ],
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function authenticatorSelection(): array
+    {
+        $selection = [
+            'residentKey' => $this->residentKey->value,
+            'requireResidentKey' => $this->residentKey->requireResidentKey(),
+            'userVerification' => $this->userVerification->value,
+        ];
+
+        if ($this->authenticatorAttachment !== null) {
+            $selection['authenticatorAttachment'] = $this->authenticatorAttachment->value;
+        }
+
+        return $selection;
     }
 }

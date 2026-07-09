@@ -5,6 +5,7 @@ declare(strict_types=1);
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Models\Passkey;
@@ -42,7 +43,9 @@ return [
     // Whether a cross-origin (iframe) ceremony is acceptable. Default: reject.
     'allow_cross_origin' => (bool) env('PASSKEYS_ALLOW_CROSS_ORIGIN', false),
 
-    // COSE algorithms offered/accepted, in preference order.
+    // COSE algorithms offered/accepted, in preference order. Ed25519 (EdDSA,
+    // COSE -8) is fully supported — opt in by uncommenting the line below once
+    // ext-sodium is installed on every host that verifies these credentials.
     'algorithms' => [
         CoseAlgorithm::ES256->value,   // -7
         CoseAlgorithm::RS256->value,   // -257
@@ -52,6 +55,19 @@ return [
     'timeout_ms' => (int) env('PASSKEYS_TIMEOUT_MS', 60_000),
     'attestation' => AttestationConveyance::None->value,
     'user_verification' => UserVerification::Required->value,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Resident key (discoverable credential) requirement
+    |--------------------------------------------------------------------------
+    |
+    | The default global posture for new credentials. 'required' keeps the
+    | usernameless / discoverable-login experience; 'preferred'/'discouraged'
+    | allow non-resident credentials. A per-call RegistrationOptionsOverrides
+    | (with residentKey / authenticatorAttachment) overrides this per ceremony.
+    |
+    */
+    'resident_key' => env('PASSKEYS_RESIDENT_KEY', ResidentKey::Required->value),
 
     /*
     |--------------------------------------------------------------------------

@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
@@ -31,6 +32,7 @@ final readonly class PasskeyConfig
         public int $timeoutMs,
         public AttestationConveyance $attestation,
         public UserVerification $userVerification,
+        public ResidentKey $residentKey,
         public ?string $challengeStore,
         public int $challengeTtl,
         public int $challengeBytes,
@@ -79,6 +81,7 @@ final readonly class PasskeyConfig
             timeoutMs: (int) ($config['timeout_ms'] ?? 60_000),
             attestation: AttestationConveyance::from(is_string($config['attestation'] ?? null) ? $config['attestation'] : 'none'),
             userVerification: UserVerification::from(is_string($config['user_verification'] ?? null) ? $config['user_verification'] : 'required'),
+            residentKey: ResidentKey::from(is_string($config['resident_key'] ?? null) ? $config['resident_key'] : 'required'),
             challengeStore: is_string($challenge['store'] ?? null) && $challenge['store'] !== '' ? $challenge['store'] : null,
             challengeTtl: (int) ($challenge['ttl'] ?? 60),
             challengeBytes: (int) ($challenge['bytes'] ?? 32),
