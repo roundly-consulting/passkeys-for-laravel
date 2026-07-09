@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://roundly-consulting.com/open-source">
+    <img src="art/hero.png" alt="Passkeys For Laravel — Roundly open source" width="100%">
+  </a>
+</p>
+
 # Passkeys for Laravel
 
 A native **WebAuthn / FIDO2 passkey relying party** for Laravel — register and authenticate
