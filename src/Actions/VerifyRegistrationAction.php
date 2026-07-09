@@ -1,0 +1,194 @@
+<?php
+
+declare(strict_types=1);
+
+namespace RoundlyConsulting\Passkeys\Actions;
+
+use Illuminate\Contracts\Events\Dispatcher;
+use RoundlyConsulting\Passkeys\Attestation\AttestationVerifier;
+use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
+use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
+use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
+use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\Enums\UserVerification;
+use RoundlyConsulting\Passkeys\Events\PasskeyRegistered;
+use RoundlyConsulting\Passkeys\Exceptions\ChallengeExpired;
+use RoundlyConsulting\Passkeys\Exceptions\ChallengeMismatch;
+use RoundlyConsulting\Passkeys\Exceptions\CredentialAlreadyRegistered;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidAuthenticatorData;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
+use RoundlyConsulting\Passkeys\Exceptions\OriginMismatch;
+use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
+use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
+use RoundlyConsulting\Passkeys\Exceptions\UnsupportedAlgorithm;
+use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
+use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Support\AuthenticatorDataParser;
+use RoundlyConsulting\Passkeys\Support\Base64Url;
+use RoundlyConsulting\Passkeys\Support\CborDecoder;
+
+/**
+ * Verifies a registration (attestation) response and persists the credential,
+ * following the WebAuthn spec §7.1 registration verification order exactly.
+ */
+final class VerifyRegistrationAction
+{
+    public function __construct(
+        private readonly ChallengeRepository $challenges,
+        private readonly AuthenticatorDataParser $authenticatorData,
+        private readonly CborDecoder $cbor,
+        private readonly AttestationVerifier $attestation,
+        private readonly PasskeyConfig $config,
+        private readonly Dispatcher $events,
+    ) {}
+
+    /**
+     * @throws PasskeyException
+     */
+    public function execute(HasPasskeys $user, RegistrationResponseData $response): Passkey
+    {
+        $rpId = $this->config->requireRpId();
+        $origins = $this->config->requireOrigins();
+
+        // §7.1.6-8 — decode and type-check clientDataJSON.
+        $clientData = ClientData::fromJson($response->clientDataJson);
+
+        if ($clientData->type !== 'webauthn.create') {
+            throw InvalidClientData::wrongType('webauthn.create');
+        }
+
+        // §7.1.9 — challenge equals the stored, single-use one (constant-time).
+        $challenge = $this->pullChallenge($response->ceremonyId);
+
+        if (! hash_equals($challenge->challenge, $clientData->challenge)) {
+            throw ChallengeMismatch::make();
+        }
+
+        // §7.1.10-11 — origin allow-list + cross-origin policy.
+        $this->assertOrigin($clientData, $origins);
+
+        // §7.1.12 — hash of clientDataJSON.
+        $clientDataHash = hash('sha256', $response->clientDataJson, true);
+
+        // §7.1.13 — CBOR-decode the attestation object (trailing-byte strict).
+        $attestation = AttestationObject::fromDecoded($this->cbor->decode($response->attestationObject));
+
+        // §7.1.14-16 — parse authenticator data, verify rpIdHash + flags.
+        $parsed = $this->authenticatorData->parse($attestation->authenticatorData);
+
+        if (! hash_equals(hash('sha256', $rpId, true), $parsed->rpIdHash)) {
+            throw RpIdMismatch::make();
+        }
+
+        $this->assertFlags($parsed, $challenge->userVerification);
+
+        // §7.1.16 — attested credential data + a supported, offered algorithm.
+        if ($parsed->coseKey === null || $parsed->credentialId === null || $parsed->coseKeyBytes === null) {
+            throw InvalidAuthenticatorData::attestedDataMissing();
+        }
+
+        if (! in_array($parsed->coseKey->algorithm->value, $this->config->algorithms, true)) {
+            throw UnsupportedAlgorithm::forId($parsed->coseKey->algorithm->value);
+        }
+
+        // §7.1.19 — verify (or record) the attestation statement.
+        $this->attestation->verify($attestation, $parsed, $clientDataHash);
+
+        // §7.1.22 — the credential id must not already be registered.
+        $credentialId = Base64Url::encode($parsed->credentialId);
+
+        if (Passkey::query()->forCredentialId($credentialId)->withTrashed()->exists()) {
+            throw CredentialAlreadyRegistered::make();
+        }
+
+        $passkey = $this->persist($user, $response, $parsed, $credentialId, $attestation);
+
+        $this->events->dispatch(new PasskeyRegistered($passkey));
+
+        return $passkey;
+    }
+
+    private function pullChallenge(?string $ceremonyId): ChallengeData
+    {
+        if ($ceremonyId === null) {
+            throw ChallengeExpired::make();
+        }
+
+        return $this->challenges->pull($ceremonyId) ?? throw ChallengeExpired::make();
+    }
+
+    /**
+     * @param  list<string>  $origins
+     */
+    private function assertOrigin(ClientData $clientData, array $origins): void
+    {
+        if (! in_array($clientData->origin, $origins, true)) {
+            throw OriginMismatch::make();
+        }
+
+        if ($clientData->crossOrigin && ! $this->config->allowCrossOrigin) {
+            throw OriginMismatch::crossOrigin();
+        }
+    }
+
+    private function assertFlags(ParsedAuthenticatorData $parsed, UserVerification $userVerification): void
+    {
+        if (! $parsed->flags->userPresent) {
+            throw InvalidAuthenticatorData::userPresenceMissing();
+        }
+
+        if ($userVerification === UserVerification::Required && ! $parsed->flags->userVerified) {
+            throw UserVerificationRequired::make();
+        }
+
+        // A credential cannot be "backed up" without being "backup eligible".
+        if ($parsed->flags->backupState && ! $parsed->flags->backupEligible) {
+            throw InvalidAuthenticatorData::backupStateInconsistent();
+        }
+    }
+
+    private function persist(
+        HasPasskeys $user,
+        RegistrationResponseData $response,
+        ParsedAuthenticatorData $parsed,
+        string $credentialId,
+        AttestationObject $attestation,
+    ): Passkey {
+        /** @var Passkey $passkey */
+        $passkey = $user->passkeys()->create([
+            'credential_id' => $credentialId,
+            'public_key' => base64_encode((string) $parsed->coseKeyBytes),
+            'user_handle' => $user->passkeyUserHandle(),
+            'transports' => $response->transports,
+            'aaguid' => $this->formatAaguid($parsed->aaguid),
+            'sign_count' => $parsed->signCount,
+            'attestation_format' => $attestation->format,
+            'backup_eligible' => $parsed->flags->backupEligible,
+            'backup_state' => $parsed->flags->backupState,
+        ]);
+
+        return $passkey;
+    }
+
+    private function formatAaguid(?string $raw): ?string
+    {
+        if ($raw === null || strlen($raw) !== 16 || $raw === str_repeat("\x00", 16)) {
+            return null;
+        }
+
+        $hex = bin2hex($raw);
+
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            substr($hex, 0, 8),
+            substr($hex, 8, 4),
+            substr($hex, 12, 4),
+            substr($hex, 16, 4),
+            substr($hex, 20, 12),
+        );
+    }
+}
