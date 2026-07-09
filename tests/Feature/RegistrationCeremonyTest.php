@@ -150,3 +150,29 @@ it('honours user-verification set to discouraged', function (): void {
 
     expect($passkey->exists)->toBeTrue();
 });
+
+it('stores a friendly name passed to register', function (): void {
+    $options = app(GenerateRegistrationOptionsAction::class)->execute($this->user);
+    $vectors = WebAuthnVectors::es256();
+    $payload = $vectors->registrationResponse(['challenge' => $options->challenge, 'ceremonyId' => $options->ceremonyId]);
+
+    $passkey = app(VerifyRegistrationAction::class)->execute(
+        $this->user,
+        RegistrationResponseData::fromArray($payload),
+        'Security key',
+    );
+
+    expect($passkey->name)->toBe('Security key');
+});
+
+it('registers a long roaming-key credential id end to end', function (): void {
+    $vectors = WebAuthnVectors::es256()->withCredentialId(random_bytes(1023));
+
+    $passkey = register($this->user, $vectors);
+
+    expect(strlen($passkey->credential_id))->toBeGreaterThan(1000)
+        ->and($passkey->exists)->toBeTrue();
+
+    // Re-registering the same long id is still rejected as a duplicate.
+    expect(fn () => register($this->user, $vectors))->toThrow(CredentialAlreadyRegistered::class);
+});
