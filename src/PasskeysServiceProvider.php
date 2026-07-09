@@ -10,6 +10,7 @@ use Illuminate\Support\ServiceProvider;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\NoneAttestationVerifier;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
+use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
 
@@ -41,6 +42,10 @@ final class PasskeysServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(PasskeyManager::class);
+        $this->app->singleton(
+            PasskeyService::class,
+            static fn (Application $app): PasskeyManager => $app->make(PasskeyManager::class),
+        );
     }
 
     public function boot(): void
