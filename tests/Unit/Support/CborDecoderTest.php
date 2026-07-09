@@ -95,6 +95,14 @@ it('rejects an unexpected end of input', function (): void {
     $this->cbor->decode('');
 })->throws(MalformedCbor::class);
 
+it('rejects a length that overflows the supported integer range', function (): void {
+    $this->cbor->decode("\x1b\xff\xff\xff\xff\xff\xff\xff\xff"); // 8-byte length, all bits set
+})->throws(MalformedCbor::class);
+
+it('rejects an array declaring more items than the remaining input', function (): void {
+    $this->cbor->decode("\x98\x64"); // array of 100 with no items present
+})->throws(MalformedCbor::class);
+
 it('throws cleanly for every truncation of a valid buffer', function (): void {
     $valid = CborEncoder::map([
         [CborEncoder::tstr('fmt'), CborEncoder::tstr('none')],
