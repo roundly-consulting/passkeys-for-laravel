@@ -49,7 +49,7 @@ final class VerifyRegistrationAction
     /**
      * @throws PasskeyException
      */
-    public function execute(HasPasskeys $user, RegistrationResponseData $response): Passkey
+    public function execute(HasPasskeys $user, RegistrationResponseData $response, ?string $name = null): Passkey
     {
         $rpId = $this->config->requireRpId();
         $origins = $this->config->requireOrigins();
@@ -105,7 +105,7 @@ final class VerifyRegistrationAction
             throw CredentialAlreadyRegistered::make();
         }
 
-        $passkey = $this->persist($user, $response, $parsed, $credentialId, $attestation);
+        $passkey = $this->persist($user, $response, $parsed, $credentialId, $attestation, $name);
 
         $this->events->dispatch(new PasskeyRegistered($passkey));
 
@@ -157,15 +157,18 @@ final class VerifyRegistrationAction
         ParsedAuthenticatorData $parsed,
         string $credentialId,
         AttestationObject $attestation,
+        ?string $name,
     ): Passkey {
         /** @var Passkey $passkey */
         $passkey = $user->passkeys()->create([
             'credential_id' => $credentialId,
+            'credential_id_hash' => Passkey::hashCredentialId($credentialId),
             'public_key' => base64_encode((string) $parsed->coseKeyBytes),
             'user_handle' => $user->passkeyUserHandle(),
             'transports' => $response->transports,
             'aaguid' => $this->formatAaguid($parsed->aaguid),
             'sign_count' => $parsed->signCount,
+            'name' => $name,
             'attestation_format' => $attestation->format,
             'backup_eligible' => $parsed->flags->backupEligible,
             'backup_state' => $parsed->flags->backupState,

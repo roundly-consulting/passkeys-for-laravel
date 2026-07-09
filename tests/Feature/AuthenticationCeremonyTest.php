@@ -64,6 +64,16 @@ it('authenticates a real ES256 assertion and advances the sign counter', functio
     Event::assertDispatched(PasskeyAuthenticated::class);
 });
 
+it('authenticates a long roaming-key credential id', function (): void {
+    $vectors = WebAuthnVectors::es256()->withCredentialId(random_bytes(1023));
+    registerVectors($this->user, $vectors);
+
+    $passkey = authenticate($vectors, ['signCount' => 3]);
+
+    expect($passkey->sign_count)->toBe(3)
+        ->and(strlen($passkey->credential_id))->toBeGreaterThan(1000);
+});
+
 it('authenticates a real RS256 assertion', function (): void {
     $vectors = WebAuthnVectors::rs256();
     registerVectors($this->user, $vectors);

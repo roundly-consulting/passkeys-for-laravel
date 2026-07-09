@@ -19,6 +19,7 @@ use RoundlyConsulting\Passkeys\Database\Factories\PasskeyFactory;
  * @property string $authenticatable_type
  * @property int|string $authenticatable_id
  * @property string $credential_id
+ * @property string $credential_id_hash
  * @property string $public_key
  * @property string $user_handle
  * @property list<string> $transports
@@ -43,6 +44,29 @@ final class Passkey extends Model
 
     protected $guarded = [];
 
+    /**
+     * Hidden by default so a naive ->toArray()/->toJson() never leaks the COSE
+     * key material, the discoverable-login handle, or the internal lookup keys.
+     * Use PasskeyResource for an explicit, display-safe payload.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'public_key',
+        'user_handle',
+        'credential_id',
+        'credential_id_hash',
+    ];
+
+    /**
+     * Deterministic lookup key for a (potentially long) base64url credential id,
+     * so the unique index stays within every database's key-length limit.
+     */
+    public static function hashCredentialId(string $credentialId): string
+    {
+        return hash('sha256', $credentialId);
+    }
+
     public function getTable(): string
     {
         $table = config('passkeys.table');
@@ -64,7 +88,7 @@ final class Passkey extends Model
      */
     public function scopeForCredentialId(Builder $query, string $credentialId): Builder
     {
-        return $query->where('credential_id', $credentialId);
+        return $query->where('credential_id_hash', self::hashCredentialId($credentialId));
     }
 
     /**

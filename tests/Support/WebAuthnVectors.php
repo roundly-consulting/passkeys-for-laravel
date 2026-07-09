@@ -66,6 +66,15 @@ final class WebAuthnVectors
         return $this->credentialId;
     }
 
+    /**
+     * Rebuild the vector around an explicit credential id (e.g. a long roaming
+     * security-key id), keeping the same key pair.
+     */
+    public function withCredentialId(string $credentialId): self
+    {
+        return new self($this->privateKey, $this->coseKey, $credentialId, $this->opensslAlgorithm);
+    }
+
     public function coseKey(): string
     {
         return $this->coseKey;

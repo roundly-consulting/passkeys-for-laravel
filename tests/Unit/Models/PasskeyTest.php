@@ -28,11 +28,32 @@ it('resolves the owning model through the morph relation', function (): void {
     expect($passkey->authenticatable->is($user))->toBeTrue();
 });
 
-it('scopes a query by credential id', function (): void {
-    Passkey::factory()->create(['credential_id' => 'known-id']);
+it('scopes a query by credential id through its hash', function (): void {
+    Passkey::factory()->withCredentialId('known-id')->create();
 
     expect(Passkey::query()->forCredentialId('known-id')->exists())->toBeTrue()
         ->and(Passkey::query()->forCredentialId('other')->exists())->toBeFalse();
+});
+
+it('stores a deterministic lookup hash for the credential id', function (): void {
+    $passkey = Passkey::factory()->withCredentialId('known-id')->create();
+
+    expect($passkey->credential_id_hash)->toBe(hash('sha256', 'known-id'))
+        ->and(Passkey::hashCredentialId('known-id'))->toBe(hash('sha256', 'known-id'));
+});
+
+it('registers a long roaming-key credential id and looks it up', function (): void {
+    $longId = str_repeat('A', 1364);
+
+    Passkey::factory()->withCredentialId($longId)->create();
+
+    expect(Passkey::query()->forCredentialId($longId)->exists())->toBeTrue();
+});
+
+it('hides key material and lookup keys from array serialisation', function (): void {
+    $array = Passkey::factory()->create()->toArray();
+
+    expect($array)->not->toHaveKeys(['public_key', 'user_handle', 'credential_id', 'credential_id_hash']);
 });
 
 it('scopes a query by user handle', function (): void {

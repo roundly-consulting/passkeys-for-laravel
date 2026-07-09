@@ -13,7 +13,12 @@ return new class extends Migration
         Schema::create('passkeys', function (Blueprint $table): void {
             $table->id();
             $table->morphs('authenticatable');
-            $table->string('credential_id')->unique();
+            // A roaming security key's credential id can reach ~1364 base64url
+            // chars (spec allows up to 1023 raw bytes), which overflows a
+            // varchar(255). Store it as text and key the unique index on a
+            // fixed-length sha-256 hash so it fits every database's limit.
+            $table->text('credential_id');
+            $table->char('credential_id_hash', 64)->unique();
             $table->text('public_key');
             $table->string('user_handle')->index();
             $table->json('transports')->nullable();
