@@ -1,0 +1,12 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+parameters:
+    level: 7
+    paths:
+        - src
+        - database
+        - config
+        - tests/Support/User.php
+    # This package ships its own config/ dir; env() is correct there.
+    configDirectories:
+        - config
