@@ -56,6 +56,7 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `timeout_ms` | `PASSKEYS_TIMEOUT_MS` | `60000` | Ceremony timeout hint sent to the browser. |
 | `attestation` | — | `none` | Attestation conveyance preference (`none`/`indirect`/`direct`). |
 | `user_verification` | — | `required` | UV requirement (`required`/`preferred`/`discouraged`). |
+| `resident_key` | `PASSKEYS_RESIDENT_KEY` | `required` | Discoverable-credential posture (`required`/`preferred`/`discouraged`); `required` keeps usernameless login. |
 | `challenge.store` | `PASSKEYS_CHALLENGE_STORE` | default cache store | Cache store name for challenges. |
 | `challenge.ttl` | `PASSKEYS_CHALLENGE_TTL` | `60` | Challenge lifetime in seconds. |
 | `challenge.bytes` | — | `32` | Random challenge length in bytes. |
@@ -106,9 +107,11 @@ $options = Passkeys::registrationOptions($user);
 return response()->json($options); // feed publicKey to navigator.credentials.create()
 
 // 2. Client -> server: verify the attestation response and persist the credential.
+//    Pass an optional friendly name for a "your passkeys" screen.
 $passkey = Passkeys::register(
     $user,
     RegistrationResponseData::fromArray($request->validated()),
+    name: 'MacBook Touch ID',
 );
 ```
 
@@ -135,16 +138,74 @@ correlate the challenge; a session-based host can echo it or store the challenge
 
 ### Per-call overrides
 
+Tune a single ceremony without changing the global defaults. Beyond user verification,
+attestation, and timeout you can opt into a **cross-platform** (roaming security-key) or a
+**non-resident** credential:
+
 ```php
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
+use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
+use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
 $options = Passkeys::registrationOptions($user, new RegistrationOptionsOverrides(
     userVerification: UserVerification::Preferred,
     attestation: AttestationConveyance::Direct,
     timeoutMs: 30_000,
+    residentKey: ResidentKey::Discouraged,
+    authenticatorAttachment: AuthenticatorAttachment::CrossPlatform,
 ));
+```
+
+The default posture stays `residentKey: required` (usernameless), and `authenticatorSelection`
+serialises byte-identically when no override is given.
+
+### Ed25519 (EdDSA) opt-in
+
+Ed25519 (COSE `-8`) verification is fully implemented; it is simply not offered by default
+because it needs `ext-sodium`. Once that extension is installed on every host that verifies these
+credentials, add it to `config/passkeys.php`:
+
+```php
+'algorithms' => [
+    CoseAlgorithm::ES256->value,   // -7
+    CoseAlgorithm::RS256->value,   // -257
+    CoseAlgorithm::EdDSA->value,   // -8 (requires ext-sodium)
+],
+```
+
+### Managing credentials
+
+Rename or revoke a stored passkey through the facade — no need to touch the model directly. A
+revoked credential is soft-deleted: it can no longer authenticate, and its credential id still
+cannot be re-registered.
+
+```php
+Passkeys::rename($passkey, 'Work laptop');
+Passkeys::revoke($passkey);     // soft-deletes the credential
+```
+
+### Listing credentials safely
+
+The `Passkey` model hides `public_key`, `user_handle`, and the credential-id lookup keys from
+array/JSON serialisation. Use the shipped `PasskeyResource` for an explicit, display-safe payload:
+
+```php
+use RoundlyConsulting\Passkeys\Http\Resources\PasskeyResource;
+
+return PasskeyResource::collection($user->passkeys);
+// [{ id, name, aaguid, transports, backup_eligible, backup_state, last_used_at, created_at }]
+```
+
+### User-model verbs
+
+The `InteractsWithPasskeys` concern also exposes ceremony verbs so the user model is the subject:
+
+```php
+$options = $user->passkeyRegistrationOptions();               // ::registrationOptions($user)
+$passkey = $user->registerPasskey($response, 'MacBook Touch ID');
+$options = $user->passkeyAuthenticationOptions();             // scoped to this user's credentials
 ```
 
 ## Events
@@ -167,8 +228,38 @@ Listen to drive audit trails and anomaly handling:
 - **No user enumeration** — every authentication miss returns a uniform "credential not found".
 - **Backup-eligibility consistency** (a backed-up credential must be backup-eligible).
 - Attestation is recorded but not cryptographically verified under the default `none` policy.
+- **Roaming-key credential ids** are stored in full (up to ~1364 base64url chars); the unique
+  index is keyed on a sha-256 hash of the credential id so it stays within every database's
+  key-length limit.
 
 ## Testing
+
+`Passkeys::fake()` swaps the relying party for a programmable, **no-crypto** double so a host can
+assert its enrolment/login controllers without reproducing authenticator crypto. It performs no
+CBOR/COSE decode, signature verification, or challenge check, and is bound only for the test.
+
+```php
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
+
+$fake = Passkeys::fake();
+
+// drive your endpoints with any payload shape…
+$this->postJson('/passkeys', ['id' => 'x', 'rawId' => 'x', 'response' => []])->assertCreated();
+
+$fake->assertRegisteredFor($user);
+
+// programmable outcomes:
+Passkeys::fake()->rejectAuthentication();          // authenticate() throws CredentialNotFound
+Passkeys::fake()->authenticatesAs($passkey);       // authenticate() returns this exact credential
+Passkeys::fake()->failRegistrationWith($exception);
+```
+
+Assertions (`assertRegistered`, `assertRegisteredFor`, `assertNothingRegistered`,
+`assertAuthenticated`, `assertAuthenticatedFor`, `assertAuthenticationFailed`,
+`assertRegistrationCount`, `assertAuthenticationCount`) throw a package exception, so they work
+under any runner.
+
+Run the package's own suite with:
 
 ```bash
 composer test
