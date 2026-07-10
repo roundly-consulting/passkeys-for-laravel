@@ -12,6 +12,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CredentialDescriptor;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
+use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\Base64Url;
 
@@ -46,6 +47,7 @@ final class GenerateRegistrationOptionsAction
                 challenge: $challenge,
                 userVerification: $userVerification,
                 algorithms: $this->config->algorithms,
+                type: CeremonyType::Registration,
                 userHandle: $user->passkeyUserHandle(),
             ),
             $this->config->challengeTtl,

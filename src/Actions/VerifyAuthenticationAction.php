@@ -10,6 +10,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
+use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated;
@@ -69,6 +70,11 @@ final class VerifyAuthenticationAction
         }
 
         $challenge = $this->challenges->pull((string) $response->ceremonyId) ?? throw ChallengeExpired::make();
+
+        // The stored challenge must have been minted for an authentication ceremony.
+        if ($challenge->type !== CeremonyType::Authentication) {
+            throw ChallengeMismatch::ceremonyType();
+        }
 
         if (! hash_equals($challenge->challenge, $clientData->challenge)) {
             throw ChallengeMismatch::make();

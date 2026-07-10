@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Event;
+use RoundlyConsulting\Passkeys\Actions\GenerateAuthenticationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyRegistrationAction;
+use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
+use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
@@ -164,6 +167,43 @@ it('stores a friendly name passed to register', function (): void {
 
     expect($passkey->name)->toBe('Security key');
 });
+
+it('rejects a registration response for a user other than the challenge target', function (): void {
+    $other = User::query()->create(['name' => 'Bob', 'email' => 'bob@example.com']);
+
+    // Options (and the user-handle binding) are minted for $other…
+    $options = app(GenerateRegistrationOptionsAction::class)->execute($other);
+    $vectors = WebAuthnVectors::es256();
+    $payload = $vectors->registrationResponse(['challenge' => $options->challenge, 'ceremonyId' => $options->ceremonyId]);
+
+    // …but the host verifies against a different user.
+    app(VerifyRegistrationAction::class)->execute($this->user, RegistrationResponseData::fromArray($payload));
+})->throws(ChallengeMismatch::class);
+
+it('skips the user-handle binding when the challenge recorded none', function (): void {
+    $vectors = WebAuthnVectors::es256();
+    $options = app(GenerateRegistrationOptionsAction::class)->execute($this->user);
+
+    // Overwrite the stored challenge with one that recorded no user-handle binding.
+    app(ChallengeRepository::class)->put($options->ceremonyId, new ChallengeData(
+        challenge: $options->challenge,
+        userVerification: UserVerification::Required,
+        algorithms: [CoseAlgorithm::ES256->value, CoseAlgorithm::RS256->value],
+    ), 60);
+
+    $payload = $vectors->registrationResponse(['challenge' => $options->challenge, 'ceremonyId' => $options->ceremonyId]);
+    $passkey = app(VerifyRegistrationAction::class)->execute($this->user, RegistrationResponseData::fromArray($payload));
+
+    expect($passkey->exists)->toBeTrue();
+});
+
+it('rejects an authentication challenge presented to the registration verifier', function (): void {
+    $options = app(GenerateAuthenticationOptionsAction::class)->execute();
+    $vectors = WebAuthnVectors::es256();
+    $payload = $vectors->registrationResponse(['challenge' => $options->challenge, 'ceremonyId' => $options->ceremonyId]);
+
+    app(VerifyRegistrationAction::class)->execute($this->user, RegistrationResponseData::fromArray($payload));
+})->throws(ChallengeMismatch::class);
 
 it('registers a long roaming-key credential id end to end', function (): void {
     $vectors = WebAuthnVectors::es256()->withCredentialId(random_bytes(1023));

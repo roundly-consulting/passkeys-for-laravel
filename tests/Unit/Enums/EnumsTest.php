@@ -5,6 +5,7 @@ declare(strict_types=1);
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
+use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
@@ -35,7 +36,13 @@ it('adopts the shared enums-for-laravel helpers on every enum', function (string
     SignCountPolicy::class,
     ResidentKey::class,
     AuthenticatorAttachment::class,
+    CeremonyType::class,
 ]);
+
+it('exposes the ceremony-type cases', function (): void {
+    expect(CeremonyType::from('registration'))->toBe(CeremonyType::Registration)
+        ->and(CeremonyType::from('authentication'))->toBe(CeremonyType::Authentication);
+});
 
 it('exposes resident-key and authenticator-attachment cases', function (): void {
     expect(ResidentKey::from('required'))->toBe(ResidentKey::Required)

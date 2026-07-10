@@ -140,6 +140,16 @@ it('rejects a mismatched assertion challenge', function (): void {
     app(VerifyAuthenticationAction::class)->execute(AuthenticationResponseData::fromArray($payload));
 })->throws(ChallengeMismatch::class);
 
+it('rejects a registration challenge presented to the authentication verifier', function (): void {
+    $vectors = WebAuthnVectors::es256();
+    registerVectors($this->user, $vectors);
+
+    $options = app(GenerateRegistrationOptionsAction::class)->execute($this->user);
+    $payload = $vectors->assertionResponse(['challenge' => $options->challenge, 'ceremonyId' => $options->ceremonyId, 'signCount' => 2]);
+
+    app(VerifyAuthenticationAction::class)->execute(AuthenticationResponseData::fromArray($payload));
+})->throws(ChallengeMismatch::class);
+
 it('rejects an assertion from a disallowed origin', function (): void {
     $vectors = WebAuthnVectors::es256();
     registerVectors($this->user, $vectors);

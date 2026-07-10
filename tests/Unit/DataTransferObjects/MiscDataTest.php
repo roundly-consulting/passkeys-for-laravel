@@ -6,6 +6,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CoseKeyData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
+use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
@@ -14,6 +15,7 @@ it('serialises challenge data to an array and back', function (): void {
         challenge: 'abc',
         userVerification: UserVerification::Preferred,
         algorithms: [-7],
+        type: CeremonyType::Registration,
         userHandle: 'handle',
     );
 
@@ -21,6 +23,7 @@ it('serialises challenge data to an array and back', function (): void {
         'challenge' => 'abc',
         'user_verification' => 'preferred',
         'algorithms' => [-7],
+        'type' => 'registration',
         'user_handle' => 'handle',
     ]);
 });
@@ -30,17 +33,35 @@ it('restores challenge data defensively from a malformed array', function (): vo
         'challenge' => 5,
         'user_verification' => null,
         'algorithms' => [-7, 'bad', -257],
+        'type' => 123,
         'user_handle' => 42,
     ]);
 
     expect($data->challenge)->toBe('')
         ->and($data->userVerification)->toBe(UserVerification::Preferred)
         ->and($data->algorithms)->toBe([-7, -257])
+        ->and($data->type)->toBe(CeremonyType::Registration)
         ->and($data->userHandle)->toBeNull();
 });
 
+it('round-trips the ceremony type through serialisation', function (): void {
+    $data = new ChallengeData(
+        challenge: 'x',
+        userVerification: UserVerification::Required,
+        algorithms: [],
+        type: CeremonyType::Authentication,
+    );
+
+    expect(ChallengeData::fromArray($data->toArray())->type)->toBe(CeremonyType::Authentication);
+});
+
 it('carries a null user handle for an authentication ceremony', function (): void {
-    $data = new ChallengeData(challenge: 'x', userVerification: UserVerification::Required, algorithms: []);
+    $data = new ChallengeData(
+        challenge: 'x',
+        userVerification: UserVerification::Required,
+        algorithms: [],
+        type: CeremonyType::Authentication,
+    );
 
     expect($data->toArray()['user_handle'])->toBeNull();
 });

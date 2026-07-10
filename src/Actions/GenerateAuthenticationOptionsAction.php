@@ -11,6 +11,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CredentialDescriptor;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
+use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\Base64Url;
 
@@ -40,6 +41,7 @@ final class GenerateAuthenticationOptionsAction
                 challenge: $challenge,
                 userVerification: $this->config->userVerification,
                 algorithms: $this->config->algorithms,
+                type: CeremonyType::Authentication,
             ),
             $this->config->challengeTtl,
         );

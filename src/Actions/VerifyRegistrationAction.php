@@ -14,6 +14,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Events\PasskeyRegistered;
 use RoundlyConsulting\Passkeys\Exceptions\ChallengeExpired;
@@ -64,9 +65,18 @@ final class VerifyRegistrationAction
         // §7.1.9 — challenge equals the stored, single-use one (constant-time).
         $challenge = $this->pullChallenge($response->ceremonyId);
 
+        // The stored challenge must have been minted for a registration ceremony.
+        if ($challenge->type !== CeremonyType::Registration) {
+            throw ChallengeMismatch::ceremonyType();
+        }
+
         if (! hash_equals($challenge->challenge, $clientData->challenge)) {
             throw ChallengeMismatch::make();
         }
+
+        // Bind the credential to the user the challenge was issued for, so an
+        // admin-on-behalf flow cannot attach it to a different account.
+        $this->assertUserHandle($user, $challenge);
 
         // §7.1.10-11 — origin allow-list + cross-origin policy.
         $this->assertOrigin($clientData, $origins);
@@ -110,6 +120,18 @@ final class VerifyRegistrationAction
         $this->events->dispatch(new PasskeyRegistered($passkey));
 
         return $passkey;
+    }
+
+    private function assertUserHandle(HasPasskeys $user, ChallengeData $challenge): void
+    {
+        // A null handle means the challenge recorded no binding; nothing to enforce.
+        if ($challenge->userHandle === null) {
+            return;
+        }
+
+        if (! hash_equals($challenge->userHandle, $user->passkeyUserHandle())) {
+            throw ChallengeMismatch::userHandle();
+        }
     }
 
     private function pullChallenge(?string $ceremonyId): ChallengeData
