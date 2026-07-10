@@ -67,7 +67,7 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `challenge.ttl` | `PASSKEYS_CHALLENGE_TTL` | `60` | Challenge lifetime in seconds. |
 | `challenge.bytes` | — | `32` | Random challenge length in bytes. |
 | `sign_count_policy` | — | `flag` | Counter-regression handling: `reject` throws, `flag` fires an event and proceeds. |
-| `attestation_trust` | — | `ignore` | Trust policy for the attestation statement. |
+| `attestation_trust` | — | `ignore` | Trust policy for the attestation statement. **Only `ignore` is supported** — `self`/`basic` throw `InvalidConfiguration` at boot (see below). |
 | `reject_unknown_fmt` | — | `false` | Reject any attestation format other than `none`. |
 | `user.handle_column` | `PASSKEYS_USER_HANDLE_COLUMN` | `passkey_user_handle` | Host column holding the opaque user handle. |
 | `user.name_attribute` | — | `email` | Model attribute used as the account name. |
@@ -96,6 +96,19 @@ final class User extends Authenticatable implements HasPasskeys
 
 The account name and display name default to the model's `email` and `name` attributes; override
 the methods or repoint them via config.
+
+The user handle is generated **lazily** and persisted on the first call to
+`registrationOptions()`/`authenticationOptions($user)` — a small write on an otherwise read-shaped
+call. The value is random, non-PII, and stable once set, so a rare double-write under concurrent
+first-time requests is harmless (last write wins). If you prefer to avoid the lazy write entirely
+(e.g. under heavy concurrency), generate the handle eagerly when the user is created:
+
+```php
+use Illuminate\Support\Str;
+
+// e.g. in a User creating() observer
+$user->passkey_user_handle ??= Str::random(43); // 32 random bytes, base64url
+```
 
 ## Usage
 
@@ -226,6 +239,11 @@ Listen to drive audit trails and anomaly handling:
 ## Security model
 
 - **Single-use, TTL-bound challenges** stored in the cache (atomic get-and-forget → replay-safe).
+- **Ceremony-bound challenges** — each challenge records whether it was minted for registration or
+  authentication and is rejected if presented to the wrong verifier.
+- **User-bound registration challenges** — the challenge records the target user handle and the
+  registration verifier rejects a response for a different user (defense-in-depth for
+  admin-on-behalf flows).
 - **Origin allow-list** and **RP ID hash** validation on every ceremony.
 - **Constant-time challenge comparison** (`hash_equals`).
 - **Signature verification** via `ext-openssl` (ES256 with DER↔raw handling, RS256); an
@@ -233,7 +251,10 @@ Listen to drive audit trails and anomaly handling:
 - **Sign-counter regression** policy (`reject` or `flag` + event) to surface cloned authenticators.
 - **No user enumeration** — every authentication miss returns a uniform "credential not found".
 - **Backup-eligibility consistency** (a backed-up credential must be backup-eligible).
-- Attestation is recorded but not cryptographically verified under the default `none` policy.
+- **Attestation trust** — only `attestation_trust => 'ignore'` is supported: the attestation format
+  is recorded but the statement is not cryptographically verified. Configuring `self` or `basic`
+  throws `InvalidConfiguration` at boot rather than silently skipping verification you expected to
+  run. (`reject_unknown_fmt` can still constrain the accepted format to `none`.)
 - **Roaming-key credential ids** are stored in full (up to ~1364 base64url chars); the unique
   index is keyed on a sha-256 hash of the credential id so it stays within every database's
   key-length limit.

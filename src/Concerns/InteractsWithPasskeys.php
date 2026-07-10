@@ -61,6 +61,16 @@ trait InteractsWithPasskeys
         return $this->passkeyService()->authenticationOptions($this);
     }
 
+    /**
+     * The opaque user handle is generated once and persisted to the host-owned
+     * handle column on first use (registration or authentication options). This
+     * is a write on a read-shaped call: under two concurrent first-time option
+     * requests both may persist a handle (last write wins; the value is random,
+     * stable-once-set and non-PII, so the outcome is harmless). Hosts that want
+     * to avoid the lazy write entirely can generate the handle eagerly at user
+     * creation via an observer/migration — see the README "Preparing your user
+     * model" section.
+     */
     public function passkeyUserHandle(): string
     {
         $column = $this->passkeyConfigString('user.handle_column', 'passkey_user_handle');
