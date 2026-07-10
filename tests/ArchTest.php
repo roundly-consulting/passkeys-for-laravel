@@ -6,11 +6,29 @@ declare(strict_types=1);
 // natively and never reach for a third-party crypto, CBOR, or WebAuthn library.
 // The only external vendor namespace allowed anywhere in src/ is our own
 // RoundlyConsulting\Enums helper package (the one sanctioned dependency).
-
-arch('src does not use forbidden third-party vendor namespaces')
+// Allow-listing the permitted roots bans every other vendor implicitly — no
+// competitor is ever named.
+arch('src only uses allowed vendor roots')
     ->expect('RoundlyConsulting\Passkeys')
-    ->not->toUse([
-        'Acme',
+    ->toOnlyUse([
+        'RoundlyConsulting\Passkeys',
+        'RoundlyConsulting\Passkeys\Database\Factories',
+        'RoundlyConsulting\Enums',
+        'Illuminate',
+        'Carbon',
+        'JsonSerializable',
+        'RuntimeException',
+        // native helpers used unqualified
+        'app',
+        'config',
+        'config_path',
+        'database_path',
+        'now',
+        '__',
+    ]);
+
+arch('no forbidden crypto, cbor, or webauthn vendors are imported')
+    ->expect([
         'Webauthn',
         'Cose',
         'CBOR',
@@ -22,7 +40,8 @@ arch('src does not use forbidden third-party vendor namespaces')
         'Firebase\\JWT',
         'lbuchs',
         'web-auth',
-    ]);
+    ])
+    ->not->toBeUsed();
 
 arch('src declares strict types')
     ->expect('RoundlyConsulting\Passkeys')
