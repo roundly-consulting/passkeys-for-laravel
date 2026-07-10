@@ -15,9 +15,12 @@ use RuntimeException;
  */
 abstract class PasskeyException extends RuntimeException
 {
-    protected static function trans(string $key): string
+    /**
+     * @param  array<string, string>  $replace
+     */
+    protected static function trans(string $key, array $replace = []): string
     {
-        $line = __('passkeys::errors.'.$key);
+        $line = __('passkeys::errors.'.$key, $replace);
 
         return is_string($line) ? $line : $key;
     }

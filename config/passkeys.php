@@ -87,7 +87,10 @@ return [
     // Sign-counter regression handling: 'reject' throws, 'flag' fires an event.
     'sign_count_policy' => SignCountPolicy::Flag->value,
 
-    // Attestation trust policy: 'ignore' records the format without verifying it.
+    // Attestation trust policy. Only 'ignore' is supported today: the attestation
+    // format is recorded but the statement is not cryptographically verified.
+    // Setting 'self' or 'basic' throws InvalidConfiguration at boot rather than
+    // silently skipping verification (self/basic verification is not yet built).
     'attestation_trust' => AttestationTrust::Ignore->value,
     'reject_unknown_fmt' => false,
 

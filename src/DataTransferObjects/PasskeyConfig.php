@@ -72,6 +72,15 @@ final readonly class PasskeyConfig
             $algorithms = [CoseAlgorithm::ES256->value, CoseAlgorithm::RS256->value];
         }
 
+        $attestationTrust = AttestationTrust::from(is_string($config['attestation_trust'] ?? null) ? $config['attestation_trust'] : 'ignore');
+
+        // Only `ignore` is honoured today — self/basic attestation is not yet
+        // verified, so accepting them would grant a false sense of trust. Fail
+        // loudly at config-parse time rather than silently skipping verification.
+        if ($attestationTrust !== AttestationTrust::Ignore) {
+            throw InvalidConfiguration::unsupportedAttestationTrust($attestationTrust->value);
+        }
+
         return new self(
             rpId: $rpId,
             rpName: is_string($rp['name'] ?? null) ? $rp['name'] : 'Laravel',
@@ -86,7 +95,7 @@ final readonly class PasskeyConfig
             challengeTtl: (int) ($challenge['ttl'] ?? 60),
             challengeBytes: (int) ($challenge['bytes'] ?? 32),
             signCountPolicy: SignCountPolicy::from(is_string($config['sign_count_policy'] ?? null) ? $config['sign_count_policy'] : 'flag'),
-            attestationTrust: AttestationTrust::from(is_string($config['attestation_trust'] ?? null) ? $config['attestation_trust'] : 'ignore'),
+            attestationTrust: $attestationTrust,
             rejectUnknownFmt: (bool) ($config['reject_unknown_fmt'] ?? false),
             userHandleColumn: is_string($user['handle_column'] ?? null) ? $user['handle_column'] : 'passkey_user_handle',
             userHandleBytes: (int) ($user['handle_bytes'] ?? 32),

@@ -22,7 +22,7 @@ it('reads a fully-specified config into typed values', function (): void {
         'user_verification' => 'preferred',
         'challenge' => ['store' => 'redis', 'ttl' => 120, 'bytes' => 64],
         'sign_count_policy' => 'reject',
-        'attestation_trust' => 'basic',
+        'attestation_trust' => 'ignore',
         'reject_unknown_fmt' => true,
         'resident_key' => 'discouraged',
         'user' => ['handle_column' => 'handle', 'handle_bytes' => 48, 'name_attribute' => 'username', 'display_name_attribute' => 'full_name'],
@@ -40,7 +40,7 @@ it('reads a fully-specified config into typed values', function (): void {
         ->and($config->challengeTtl)->toBe(120)
         ->and($config->challengeBytes)->toBe(64)
         ->and($config->signCountPolicy)->toBe(SignCountPolicy::Reject)
-        ->and($config->attestationTrust)->toBe(AttestationTrust::Basic)
+        ->and($config->attestationTrust)->toBe(AttestationTrust::Ignore)
         ->and($config->residentKey)->toBe(ResidentKey::Discouraged)
         ->and($config->rejectUnknownFmt)->toBeTrue()
         ->and($config->userHandleColumn)->toBe('handle')
@@ -92,3 +92,11 @@ it('returns the configured origins', function (): void {
     expect(PasskeyConfig::fromArray(['origins' => ['https://example.com']])->requireOrigins())
         ->toBe(['https://example.com']);
 });
+
+it('defaults the attestation trust to ignore', function (): void {
+    expect(PasskeyConfig::fromArray([])->attestationTrust)->toBe(AttestationTrust::Ignore);
+});
+
+it('rejects an unsupported attestation trust level', function (string $trust): void {
+    PasskeyConfig::fromArray(['attestation_trust' => $trust]);
+})->throws(InvalidConfiguration::class)->with(['self', 'basic']);
