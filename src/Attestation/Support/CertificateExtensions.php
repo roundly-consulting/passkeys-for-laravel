@@ -24,6 +24,9 @@ final readonly class CertificateExtensions
     /** WebAuthn §8.2.1 — id-fido-gen-ce-aaguid. */
     public const string FIDO_AAGUID_OID = '1.3.6.1.4.1.45724.1.1.4';
 
+    /** WebAuthn §8.8 — Apple's anonymous-attestation nonce extension. */
+    public const string APPLE_NONCE_OID = '1.2.840.113635.100.8.2';
+
     public function __construct(private DerDecoder $decoder = new DerDecoder) {}
 
     /**
@@ -81,5 +84,41 @@ final readonly class CertificateExtensions
     public function fidoAaguidIsCritical(Certificate $certificate): bool
     {
         return $certificate->extension(self::FIDO_AAGUID_OID)?->critical === true;
+    }
+
+    /**
+     * The nonce Apple baked into a credential certificate, or null when the
+     * certificate carries no such extension.
+     *
+     * WebAuthn §8.8 gives the shape as `SEQUENCE { [1] { OCTET STRING nonce } }`.
+     * That nonce is what binds an Apple statement — which carries no signature of
+     * its own — to ONE ceremony: it is `SHA-256(authenticatorData ‖
+     * clientDataHash)`, and Apple's CA only ever issues a certificate over the
+     * nonce the authenticator presented. Replaying a genuine statement from
+     * another ceremony changes the hash, and this is where that shows up.
+     *
+     * @throws MalformedDerException when the extension is not that shape
+     */
+    public function appleNonce(Certificate $certificate): ?string
+    {
+        $extension = $certificate->extension(self::APPLE_NONCE_OID);
+
+        if ($extension === null) {
+            return null;
+        }
+
+        $tagged = $this->decoder->decode($extension->der)->tagged(1);
+
+        if ($tagged === null) {
+            throw MalformedDerException::malformedContents('the Apple nonce extension', 'it carries no [1] element');
+        }
+
+        $children = $tagged->children();
+
+        if ($children === []) {
+            throw MalformedDerException::malformedContents('the Apple nonce extension', 'its [1] element is empty');
+        }
+
+        return $children[0]->octetString();
     }
 }

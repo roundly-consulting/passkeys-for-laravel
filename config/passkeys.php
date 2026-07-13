@@ -128,8 +128,9 @@ return [
     | anchored when its last certificate IS an anchor, or is signed by one (x5c
     | usually omits the root).
     |
-    | 'defaults' trusts the roots shipped in this package's resources/roots (the
-    | Google hardware-attestation roots published by Google). Set it to false to
+    | 'defaults' trusts the roots shipped in this package's resources/roots —
+    | Apple's published WebAuthn Root CA (so Apple devices verify with no further
+    | setup) and Google's published hardware-attestation roots. Set it to false to
     | trust ONLY the paths below.
     |
     | 'paths' maps a format to absolute PEM (or PEM-bundle) paths on the host's

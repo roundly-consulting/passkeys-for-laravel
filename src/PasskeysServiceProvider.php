@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Passkeys;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use RoundlyConsulting\Passkeys\Attestation\AppleAttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\AttestationAnchors;
 use RoundlyConsulting\Passkeys\Attestation\AttestationGate;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifier;
@@ -46,6 +47,7 @@ final class PasskeysServiceProvider extends ServiceProvider
             return new AttestationVerifierRegistry([
                 'none' => new NoneAttestationVerifier,
                 'packed' => new PackedAttestationVerifier($app->make(CredentialCrypto::class)),
+                'apple' => new AppleAttestationVerifier,
             ]);
         });
 

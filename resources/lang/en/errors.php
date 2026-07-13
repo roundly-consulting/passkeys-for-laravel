@@ -37,6 +37,8 @@ return [
     'attestation_signature_mismatch' => 'The ":format" attestation signature could not be verified.',
     'attestation_algorithm_mismatch' => 'The ":format" attestation statement claims COSE algorithm :claimed but its signing key is :actual.',
     'attestation_aaguid_mismatch' => 'The attestation certificate\'s AAGUID does not match the one in the authenticator data.',
+    'attestation_credential_key_mismatch' => 'The ":format" attestation certificate certifies a different public key than the credential being registered.',
+    'attestation_apple_nonce_mismatch' => 'The Apple attestation certificate\'s nonce is not the hash of this ceremony\'s authenticator data and client data, so the statement does not attest this registration.',
     'attestation_certificate_requirement' => 'The ":format" attestation certificate does not meet a WebAuthn requirement: :requirement.',
     'attestation_ecdaa_unsupported' => 'The ":format" attestation statement uses ECDAA, which WebAuthn Level 3 removed and this relying party never accepts.',
 
