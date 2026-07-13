@@ -27,6 +27,19 @@ const SHIPPED_ANDROID_ROOTS = [
 ];
 
 /**
+ * The shipped Apple WebAuthn Root CA, fetched from Apple's own published list at
+ * https://www.apple.com/certificateauthority/private/ (the PEM at
+ * https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem) and
+ * pinned here. It is NOT Apple's App Attest root, nor an App Store root: a wrong
+ * anchor would accept forged attestations and look like it worked.
+ *
+ * @var array<string, string>
+ */
+const SHIPPED_APPLE_ROOTS = [
+    'apple-webauthn-root-ca.pem' => '0915dd5c07a28db549d1f677bb5a75d4bfbe9561a773424327762e9e02f9bb29',
+];
+
+/**
  * @param  array<string, mixed>  $overrides
  */
 function anchorsFor(array $overrides = []): AttestationAnchors
@@ -62,10 +75,23 @@ it('ships the google hardware attestation roots, byte for byte', function (): vo
     }
 });
 
+it('ships the apple webauthn root ca, byte for byte', function (): void {
+    $anchors = anchorsFor()->for('apple');
+
+    expect($anchors)->toHaveCount(count(SHIPPED_APPLE_ROOTS));
+
+    $root = $anchors[0];
+
+    expect($root->fingerprint(HashAlgorithm::Sha256))->toBe(SHIPPED_APPLE_ROOTS['apple-webauthn-root-ca.pem'])
+        ->and($root->commonName())->toBe('Apple WebAuthn Root CA')
+        ->and($root->isSelfSigned())->toBeTrue();
+});
+
 it('drops the shipped roots when defaults are switched off', function (): void {
     $anchors = anchorsFor(['attestation_anchors' => ['defaults' => false]]);
 
-    expect($anchors->for('android-key'))->toBe([]);
+    expect($anchors->for('android-key'))->toBe([])
+        ->and($anchors->for('apple'))->toBe([]);
 });
 
 it('ships no default anchor for vendor-specific formats', function (): void {

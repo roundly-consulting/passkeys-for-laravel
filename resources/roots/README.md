@@ -7,8 +7,22 @@ when it is `false`.
 
 Every certificate here was fetched from its vendor's own published source and its
 SHA-256 fingerprint is pinned as a literal in
-`tests/Unit/Attestation/ShippedRootsTest.php`. Nothing is trusted that cannot be
-verified against the vendor's publication.
+`tests/Unit/Attestation/AttestationAnchorsTest.php`. Nothing is trusted that cannot
+be verified against the vendor's publication.
+
+## `apple/` — Apple anonymous attestation (WebAuthn §8.8)
+
+Source: <https://www.apple.com/certificateauthority/private/> — the *Apple WebAuthn
+Root CA*, published at
+<https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem>. It is **not**
+Apple's App Attest root, nor an App Store root.
+
+| File | Subject | Key | SHA-256 (DER) |
+|---|---|---|---|
+| `apple-webauthn-root-ca.pem` | `CN=Apple WebAuthn Root CA, O=Apple Inc., ST=California` | EC P-384 | `0915dd5c07a28db549d1f677bb5a75d4bfbe9561a773424327762e9e02f9bb29` |
+
+Apple's `x5c` always omits the root, so this anchor completes the chain rather than
+appearing in it — the anchor store's *anchored-by-completion* mode.
 
 ## `android-key/` — Google hardware attestation
 
