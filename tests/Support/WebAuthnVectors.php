@@ -129,9 +129,14 @@ final class WebAuthnVectors
         $attested = ($flags & 0x40) === 0 ? '' : $this->attestedCredentialData($aaguid);
 
         $authData = $this->authData($rpId, $flags, $signCount, $attested);
+
+        // `attStmt` is handed in already CBOR-encoded so a fixture can carry a
+        // genuine (or deliberately bogus) attestation statement of any shape.
+        $statement = is_string($options['attStmt'] ?? null) ? $options['attStmt'] : CborEncoder::map([]);
+
         $attestationObject = CborEncoder::map([
             [CborEncoder::tstr('fmt'), CborEncoder::tstr(self::string($options, 'fmt', 'none'))],
-            [CborEncoder::tstr('attStmt'), CborEncoder::map([])],
+            [CborEncoder::tstr('attStmt'), $statement],
             [CborEncoder::tstr('authData'), CborEncoder::bstr($authData)],
         ]);
 
