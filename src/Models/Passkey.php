@@ -28,6 +28,7 @@ use RoundlyConsulting\Passkeys\Database\Factories\PasskeyFactory;
  * @property int $sign_count
  * @property string|null $name
  * @property string|null $attestation_format
+ * @property string|null $attestation_type
  * @property bool $backup_eligible
  * @property bool $backup_state
  * @property CarbonInterface|null $last_used_at

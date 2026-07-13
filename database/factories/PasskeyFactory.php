@@ -47,6 +47,7 @@ final class PasskeyFactory extends Factory
             'sign_count' => $this->faker->numberBetween(0, 50),
             'name' => null,
             'attestation_format' => 'none',
+            'attestation_type' => null,
             'backup_eligible' => true,
             'backup_state' => true,
             'last_used_at' => now(),

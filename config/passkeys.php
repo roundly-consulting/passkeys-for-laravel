@@ -53,7 +53,12 @@ return [
     ],
 
     'timeout_ms' => (int) env('PASSKEYS_TIMEOUT_MS', 60_000),
-    'attestation' => AttestationConveyance::None->value,
+
+    // The attestation-conveyance preference sent in creation options. Anything
+    // stricter than 'ignore' below needs 'direct' here, or authenticators are
+    // told not to attest at all.
+    'attestation' => env('PASSKEYS_ATTESTATION', AttestationConveyance::None->value),
+
     'user_verification' => UserVerification::Required->value,
 
     /*
@@ -87,12 +92,81 @@ return [
     // Sign-counter regression handling: 'reject' throws, 'flag' fires an event.
     'sign_count_policy' => SignCountPolicy::Flag->value,
 
-    // Attestation trust policy. Only 'ignore' is supported today: the attestation
-    // format is recorded but the statement is not cryptographically verified.
-    // Setting 'self' or 'basic' throws InvalidConfiguration at boot rather than
-    // silently skipping verification (self/basic verification is not yet built).
-    'attestation_trust' => AttestationTrust::Ignore->value,
-    'reject_unknown_fmt' => false,
+    /*
+    |--------------------------------------------------------------------------
+    | Attestation trust policy
+    |--------------------------------------------------------------------------
+    |
+    | The ladder is monotone — ignore ⊂ self ⊂ basic:
+    |
+    |   'ignore' (default) — record the format, never read the statement. A host
+    |                        that never touches this sees no verification at all.
+    |   'self'             — the statement's maths must hold (signature, chain
+    |                        linkage, certificate validity dates); anchoring is
+    |                        waived, so self-attestation is accepted.
+    |   'basic'            — the maths must hold AND the certificate chain must
+    |                        reach a configured trust anchor. Self-attestation is
+    |                        refused.
+    |
+    | Turning real attestation on is two lines: PASSKEYS_ATTESTATION=direct and
+    | PASSKEYS_ATTESTATION_TRUST=basic.
+    |
+    */
+    'attestation_trust' => env('PASSKEYS_ATTESTATION_TRUST', AttestationTrust::Ignore->value),
+
+    // Under 'ignore', also refuse a format this package has no verifier for, and
+    // refuse a known format whose statement does not verify. Trust anchors are
+    // still not consulted. Default: accept everything, verify nothing.
+    'reject_unknown_fmt' => (bool) env('PASSKEYS_REJECT_UNKNOWN_FMT', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Attestation trust anchors
+    |--------------------------------------------------------------------------
+    |
+    | Which roots an attestation chain may terminate at, per format. A chain is
+    | anchored when its last certificate IS an anchor, or is signed by one (x5c
+    | usually omits the root).
+    |
+    | 'defaults' trusts the roots shipped in this package's resources/roots (the
+    | Google hardware-attestation roots published by Google). Set it to false to
+    | trust ONLY the paths below.
+    |
+    | 'paths' maps a format to absolute PEM (or PEM-bundle) paths on the host's
+    | filesystem. Security keys attest under their vendor's own root, so 'packed'
+    | ships no default: supply your vendor's PEM.
+    |
+    */
+    'attestation_anchors' => [
+        'defaults' => (bool) env('PASSKEYS_ATTESTATION_DEFAULT_ANCHORS', true),
+
+        'paths' => [
+            // 'packed' => [storage_path('webauthn/vendor-fido-ca.pem')],
+        ],
+    ],
+
+    // Clock-skew leeway (seconds) applied to BOTH bounds of an attestation
+    // certificate's validity window. 0–3600; anything else fails at boot.
+    // Note: an authenticator whose batch certificate has lapsed can no longer
+    // enrol under 'self'/'basic'. That is deliberate.
+    'attestation_clock_skew' => (int) env('PASSKEYS_ATTESTATION_CLOCK_SKEW', 60),
+
+    /*
+    |--------------------------------------------------------------------------
+    | AAGUID allow-list
+    |--------------------------------------------------------------------------
+    |
+    | Lowercase, formatted UUIDs, comma-separated. Empty (the default) allows any
+    | authenticator model. An AAGUID is only PROVEN under 'basic' — under the
+    | lower tiers the authenticator asserts it, so the list is advisory there,
+    | and it is still enforced when configured.
+    |
+    */
+    'aaguids' => [
+        'allowed' => array_values(array_filter(
+            explode(',', (string) env('PASSKEYS_AAGUIDS_ALLOWED', '')),
+        )),
+    ],
 
     /*
     |--------------------------------------------------------------------------

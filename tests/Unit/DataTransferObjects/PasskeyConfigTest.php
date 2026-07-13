@@ -97,6 +97,52 @@ it('defaults the attestation trust to ignore', function (): void {
     expect(PasskeyConfig::fromArray([])->attestationTrust)->toBe(AttestationTrust::Ignore);
 });
 
-it('rejects an unsupported attestation trust level', function (string $trust): void {
-    PasskeyConfig::fromArray(['attestation_trust' => $trust]);
-})->throws(InvalidConfiguration::class)->with(['self', 'basic']);
+it('accepts every trust level now that the ladder is real', function (string $trust): void {
+    $config = PasskeyConfig::fromArray([
+        'attestation' => 'direct',
+        'attestation_trust' => $trust,
+    ]);
+
+    expect($config->attestationTrust->value)->toBe($trust);
+})->with(['ignore', 'self', 'basic']);
+
+it('refuses to demand attestation while telling authenticators not to send any', function (string $trust): void {
+    PasskeyConfig::fromArray([
+        'attestation' => 'none',
+        'attestation_trust' => $trust,
+    ]);
+})->throws(InvalidConfiguration::class, 'PASSKEYS_ATTESTATION=direct')->with(['self', 'basic']);
+
+it('leaves the default posture alone: ignore with none conveyance is fine', function (): void {
+    $config = PasskeyConfig::fromArray(['attestation' => 'none', 'attestation_trust' => 'ignore']);
+
+    expect($config->attestationTrust)->toBe(AttestationTrust::Ignore);
+});
+
+it('defaults the attestation clock skew to a minute', function (): void {
+    expect(PasskeyConfig::fromArray([])->attestationClockSkew)->toBe(60)
+        ->and(PasskeyConfig::MAX_ATTESTATION_CLOCK_SKEW)->toBe(3600);
+});
+
+it('accepts a clock skew at either bound', function (int $seconds): void {
+    expect(PasskeyConfig::fromArray(['attestation_clock_skew' => $seconds])->attestationClockSkew)->toBe($seconds);
+})->with([0, 3600]);
+
+it('fails loudly on a clock skew outside its range', function (mixed $value): void {
+    PasskeyConfig::fromArray(['attestation_clock_skew' => $value]);
+})->throws(InvalidConfiguration::class, 'attestation_clock_skew')->with([-1, 3601, 'soon', true]);
+
+it('trusts the shipped anchors by default and can be told not to', function (): void {
+    expect(PasskeyConfig::fromArray([])->attestationAnchorDefaults)->toBeTrue()
+        ->and(PasskeyConfig::fromArray(['attestation_anchors' => ['defaults' => false]])->attestationAnchorDefaults)->toBeFalse();
+});
+
+it('normalises the aaguid allow-list to lowercase', function (): void {
+    $config = PasskeyConfig::fromArray([
+        'aaguids' => ['allowed' => ['ABCDEF01-1111-1111-1111-111111111111', '', 42]],
+    ]);
+
+    expect($config->allowedAaguids)->toBe(['abcdef01-1111-1111-1111-111111111111'])
+        ->and(PasskeyConfig::fromArray([])->allowedAaguids)->toBe([])
+        ->and(PasskeyConfig::fromArray(['aaguids' => ['allowed' => 'nope']])->allowedAaguids)->toBe([]);
+});
