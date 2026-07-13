@@ -72,15 +72,19 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `allow_cross_origin` | `PASSKEYS_ALLOW_CROSS_ORIGIN` | `false` | Whether a cross-origin (iframe) ceremony is accepted. |
 | `algorithms` | — | `ES256`, `RS256` | COSE algorithms offered/accepted, in preference order. |
 | `timeout_ms` | `PASSKEYS_TIMEOUT_MS` | `60000` | Ceremony timeout hint sent to the browser. |
-| `attestation` | — | `none` | Attestation conveyance preference (`none`/`indirect`/`direct`). |
+| `attestation` | `PASSKEYS_ATTESTATION` | `none` | Attestation conveyance preference (`none`/`indirect`/`direct`). |
 | `user_verification` | — | `required` | UV requirement (`required`/`preferred`/`discouraged`). |
 | `resident_key` | `PASSKEYS_RESIDENT_KEY` | `required` | Discoverable-credential posture (`required`/`preferred`/`discouraged`); `required` keeps usernameless login. |
 | `challenge.store` | `PASSKEYS_CHALLENGE_STORE` | default cache store | Cache store name for challenges. |
 | `challenge.ttl` | `PASSKEYS_CHALLENGE_TTL` | `60` | Challenge lifetime in seconds. |
 | `challenge.bytes` | — | `32` | Random challenge length in bytes. |
 | `sign_count_policy` | — | `flag` | Counter-regression handling: `reject` throws, `flag` fires an event and proceeds. |
-| `attestation_trust` | — | `ignore` | Trust policy for the attestation statement. **Only `ignore` is supported** — `self`/`basic` throw `InvalidConfiguration` at boot (see below). |
-| `reject_unknown_fmt` | — | `false` | Reject any attestation format other than `none`. |
+| `attestation_trust` | `PASSKEYS_ATTESTATION_TRUST` | `ignore` | Trust policy for the attestation statement: `ignore` / `self` / `basic` (see **Attestation**). |
+| `reject_unknown_fmt` | `PASSKEYS_REJECT_UNKNOWN_FMT` | `false` | Under `ignore`, refuse a format we cannot verify — and a known format whose statement does not verify. |
+| `attestation_anchors.defaults` | `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS` | `true` | Trust the roots shipped in `resources/roots/`. |
+| `attestation_anchors.paths` | — | `[]` | `format => [absolute PEM paths]` — your own trust anchors. |
+| `attestation_clock_skew` | `PASSKEYS_ATTESTATION_CLOCK_SKEW` | `60` | Leeway (seconds, 0–3600) on both bounds of an attestation certificate's validity window. |
+| `aaguids.allowed` | `PASSKEYS_AAGUIDS_ALLOWED` | `[]` | Comma-separated AAGUID allow-list; empty allows every authenticator model. |
 | `user.handle_column` | `PASSKEYS_USER_HANDLE_COLUMN` | `passkey_user_handle` | Host column holding the opaque user handle. |
 | `user.name_attribute` | — | `email` | Model attribute used as the account name. |
 | `user.display_name_attribute` | — | `name` | Model attribute used as the display name. |
@@ -246,6 +250,98 @@ $passkey = $user->registerPasskey($response, 'MacBook Touch ID');
 $options = $user->passkeyAuthenticationOptions();             // scoped to this user's credentials
 ```
 
+## Attestation
+
+Attestation is how an authenticator proves **what it is**. It is off by default (the format is
+recorded, the statement is never read), and turning it on is **two config lines**:
+
+```dotenv
+PASSKEYS_ATTESTATION=direct        # ask authenticators to attest
+PASSKEYS_ATTESTATION_TRUST=basic   # and refuse anything unproven
+```
+
+Ceremony call sites do not change at all — attestation hardening is configuration, not code. What
+changes is what you can see afterwards:
+
+```php
+$passkey->attestation_format;   // 'packed'
+$passkey->attestation_type;     // 'basic' — the grade of proof registration established
+```
+
+### The trust ladder
+
+| `attestation_trust` | What it accepts |
+|---|---|
+| `ignore` (default) | Everything. The format is recorded; **no statement is ever read**. |
+| `self` | The statement's **maths must hold** — signature, chain linkage, certificate validity dates. Anchoring is waived, so self-attestation and an un-anchored batch certificate both pass. |
+| `basic` | The maths must hold **and** the certificate chain must reach a configured **trust anchor**. Self-attestation is refused. |
+
+Supported formats: **`none`** and **`packed`** (x5c batch attestation and self-attestation) —
+the formats CTAP2 security keys and most platform authenticators send under `direct`. An
+authenticator presenting anything else under `self`/`basic` is refused by name
+(`UnsupportedAttestationFormat`).
+
+### Trust anchors
+
+A chain is anchored when its last certificate **is** an anchor, or is **signed by** one (x5c
+commonly omits the root). Security keys attest under their vendor's own root, so supply it:
+
+```php
+'attestation_anchors' => [
+    'paths' => ['packed' => [storage_path('webauthn/vendor-fido-ca.pem')]],
+],
+```
+
+The package ships Google's published hardware-attestation roots in `resources/roots/` (trusted
+unless `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS=false`); their fingerprints are pinned in the test
+suite. Every rejection names the format, the offending value and the config key that fixes it:
+
+> The `'packed'` attestation chain's root (`"CN=Some Vendor CA, O=Vendor"`, sha256 `9f3ae1c2…`) is
+> not among the configured trust anchors. Add its PEM to
+> `passkeys.attestation_anchors.paths.packed`.
+
+### Certificate validity dates
+
+Attestation certificates are held to their validity window (both bounds, with
+`attestation_clock_skew` seconds of leeway — default `60`, range `0–3600`; anything else fails at
+boot with `InvalidConfiguration`).
+
+> ⚠️ **This refuses real hardware.** An authenticator whose batch certificate has **lapsed** can no
+> longer enrol under `self`/`basic`. That is deliberate — an expired chain is not something a
+> relying party should silently bless — but it is a real-world consequence to plan for.
+
+### AAGUID allow-list
+
+```dotenv
+PASSKEYS_AAGUIDS_ALLOWED=d8522d9f-575b-4866-88a9-ba99fa02f35b
+```
+
+Empty (the default) allows every authenticator model. The AAGUID is only **proven** under `basic`
+(the batch certificate binds it); under the lower tiers the authenticator merely asserts it — the
+list is still enforced when configured.
+
+### Catching failures
+
+Two separately catchable outcomes, so forgeries and policy refusals are never confused:
+
+- `InvalidAttestation` — the **maths** failed (malformed statement, bad signature, algorithm
+  mismatch, AAGUID mismatch, a certificate requirement).
+- `AttestationUntrusted` — the statement is sound and **policy refused it** (unanchored root, no
+  anchors configured, self-attestation under `basic`, expired certificate, AAGUID not allowed).
+- `AttestationRequired` — the tier demands a statement and the authenticator sent `none`.
+
+Both extend `PasskeyException`. Setting `attestation_trust` to anything but `ignore` while
+`attestation` is `none` fails at **boot**, not at the first lost registration.
+
+### Testing your policy
+
+Point the anchors at a throwaway chain and any `packed` happy path becomes a three-line test:
+
+```php
+file_put_contents($path, $chain->root()->pem());
+config()->set('passkeys.attestation_anchors', ['defaults' => false, 'paths' => ['packed' => [$path]]]);
+```
+
 ## Events
 
 Listen to drive audit trails and anomaly handling:
@@ -273,10 +369,11 @@ Listen to drive audit trails and anomaly handling:
 - **Sign-counter regression** policy (`reject` or `flag` + event) to surface cloned authenticators.
 - **No user enumeration** — every authentication miss returns a uniform "credential not found".
 - **Backup-eligibility consistency** (a backed-up credential must be backup-eligible).
-- **Attestation trust** — only `attestation_trust => 'ignore'` is supported: the attestation format
-  is recorded but the statement is not cryptographically verified. Configuring `self` or `basic`
-  throws `InvalidConfiguration` at boot rather than silently skipping verification you expected to
-  run. (`reject_unknown_fmt` can still constrain the accepted format to `none`.)
+- **Attestation trust** — a monotone ladder (`ignore` ⊂ `self` ⊂ `basic`) with `ignore` as the
+  default: the format is recorded and the statement is never read. `self` verifies the statement's
+  maths; `basic` additionally requires the certificate chain to reach a configured trust anchor.
+  Format verifiers only prove maths; every trust ruling is made in one place (`AttestationGate`).
+  See **Attestation** below.
 - **Roaming-key credential ids** are stored in full (up to ~1364 base64url chars); the unique
   index is keyed on a sha-256 hash of the credential id so it stays within every database's
   key-length limit.

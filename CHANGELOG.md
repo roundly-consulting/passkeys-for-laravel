@@ -27,3 +27,24 @@ Initial release.
 - Registration-options flexibility: `residentKey` / `authenticatorAttachment` overrides and a
   `resident_key` config default; documented Ed25519 opt-in.
 - Widened `credential_id` storage (roaming security keys) with a sha-256-hashed unique index.
+- **Real attestation verification.** `attestation_trust` is a monotone ladder — `ignore` (default,
+  unchanged behaviour: the format is recorded, the statement is never read) ⊂ `self` (the
+  statement's maths must hold) ⊂ `basic` (maths + the chain must reach a configured trust anchor).
+  `self` and `basic` no longer throw at boot.
+  - `packed` attestation (WebAuthn §8.2): x5c batch attestation **and** self-attestation, with the
+    §8.2.1 certificate requirements and the `id-fido-gen-ce-aaguid` binding.
+  - One `AttestationGate` owns every trust ruling; per-format verifiers only prove maths.
+  - Trust anchors per format (`attestation_anchors.paths`), anchored by equality **or** by
+    completion (x5c usually omits the root). Google's published hardware-attestation roots ship in
+    `resources/roots/` and are trusted unless `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS=false`.
+  - AAGUID allow-list (`aaguids.allowed`, `PASSKEYS_AAGUIDS_ALLOWED`).
+  - New separately-catchable exceptions: `InvalidAttestation` (the maths failed),
+    `AttestationUntrusted` (policy refused it), `AttestationRequired`,
+    `UnsupportedAttestationFormat`.
+  - Boot guard: `attestation_trust != ignore` with `attestation = none` fails at config-parse time
+    instead of losing every registration.
+  - New nullable `attestation_type` column (additive migration); existing rows stay null.
+  - ⚠️ **Attestation certificates are held to their validity window** (leeway
+    `attestation_clock_skew`, default 60 s, range 0–3600). An authenticator whose **batch
+    certificate has lapsed** can no longer enrol under `self`/`basic`. This refuses real hardware,
+    by design.
