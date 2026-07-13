@@ -81,7 +81,7 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `sign_count_policy` | — | `flag` | Counter-regression handling: `reject` throws, `flag` fires an event and proceeds. |
 | `attestation_trust` | `PASSKEYS_ATTESTATION_TRUST` | `ignore` | Trust policy for the attestation statement: `ignore` / `self` / `basic` (see **Attestation**). |
 | `reject_unknown_fmt` | `PASSKEYS_REJECT_UNKNOWN_FMT` | `false` | Under `ignore`, refuse a format we cannot verify — and a known format whose statement does not verify. |
-| `attestation_anchors.defaults` | `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS` | `true` | Trust the roots shipped in `resources/roots/`. |
+| `attestation_anchors.defaults` | `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS` | `true` | Trust the roots shipped in `resources/roots/` (Apple WebAuthn Root CA, Google hardware-attestation roots). |
 | `attestation_anchors.paths` | — | `[]` | `format => [absolute PEM paths]` — your own trust anchors. |
 | `attestation_clock_skew` | `PASSKEYS_ATTESTATION_CLOCK_SKEW` | `60` | Leeway (seconds, 0–3600) on both bounds of an attestation certificate's validity window. |
 | `aaguids.allowed` | `PASSKEYS_AAGUIDS_ALLOWED` | `[]` | Comma-separated AAGUID allow-list; empty allows every authenticator model. |
@@ -264,8 +264,8 @@ Ceremony call sites do not change at all — attestation hardening is configurat
 changes is what you can see afterwards:
 
 ```php
-$passkey->attestation_format;   // 'packed'
-$passkey->attestation_type;     // 'basic' — the grade of proof registration established
+$passkey->attestation_format;   // 'packed' | 'apple' | 'none'
+$passkey->attestation_type;     // 'basic' | 'anonca' | 'self' | 'none' — the grade of proof established
 ```
 
 ### The trust ladder
@@ -276,10 +276,22 @@ $passkey->attestation_type;     // 'basic' — the grade of proof registration e
 | `self` | The statement's **maths must hold** — signature, chain linkage, certificate validity dates. Anchoring is waived, so self-attestation and an un-anchored batch certificate both pass. |
 | `basic` | The maths must hold **and** the certificate chain must reach a configured **trust anchor**. Self-attestation is refused. |
 
-Supported formats: **`none`** and **`packed`** (x5c batch attestation and self-attestation) —
-the formats CTAP2 security keys and most platform authenticators send under `direct`. An
-authenticator presenting anything else under `self`/`basic` is refused by name
+Supported formats:
+
+| `fmt` | Who sends it | Attestation type established |
+|---|---|---|
+| `none` | Everything, unless you ask for `direct` | `none` |
+| `packed` | CTAP2 security keys and most platform authenticators | `basic` (x5c) or `self` (no x5c) |
+| `apple` | Apple platform authenticators (Touch ID / Face ID) | `anonca` |
+
+An authenticator presenting anything else under `self`/`basic` is refused by name
 (`UnsupportedAttestationFormat`).
+
+**Apple attests anonymously.** Its statement carries no signature over the ceremony at all: the
+credential certificate instead carries a nonce equal to `SHA-256(authenticatorData ‖
+clientDataHash)`, and certifies the credential's own public key. Both are verified, which is what
+makes a statement from another ceremony unusable here. The grade it establishes is `anonca` —
+"a genuine Apple authenticator", never a device identity, which is exactly what Apple intends.
 
 ### Trust anchors
 
@@ -292,9 +304,12 @@ commonly omits the root). Security keys attest under their vendor's own root, so
 ],
 ```
 
-The package ships Google's published hardware-attestation roots in `resources/roots/` (trusted
-unless `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS=false`); their fingerprints are pinned in the test
-suite. Every rejection names the format, the offending value and the config key that fixes it:
+The package ships **Apple's published WebAuthn Root CA** and **Google's published
+hardware-attestation roots** in `resources/roots/` (trusted unless
+`PASSKEYS_ATTESTATION_DEFAULT_ANCHORS=false`); every fingerprint is pinned in the test suite. So
+**Apple devices verify under `basic` with no anchor setup at all** — Apple omits the root from its
+`x5c`, and the shipped anchor completes the chain. Every rejection names the format, the offending
+value and the config key that fixes it:
 
 > The `'packed'` attestation chain's root (`"CN=Some Vendor CA, O=Vendor"`, sha256 `9f3ae1c2…`) is
 > not among the configured trust anchors. Add its PEM to
