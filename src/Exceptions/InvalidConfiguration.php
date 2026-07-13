@@ -21,8 +21,33 @@ final class InvalidConfiguration extends PasskeyException
         return new self(self::trans('unsupported_configured_algorithm', ['alg' => (string) $alg]));
     }
 
-    public static function unsupportedAttestationTrust(string $trust): self
+    /**
+     * The host demands attestation proof while telling authenticators not to send
+     * any — every registration would fail, mysteriously, at the gate.
+     */
+    public static function attestationConveyanceMismatch(string $trust): self
     {
-        return new self(self::trans('unsupported_attestation_trust', ['trust' => $trust]));
+        return new self(self::trans('attestation_conveyance_mismatch', ['trust' => $trust]));
+    }
+
+    /**
+     * A typo'd clock skew is a configuration bug, never a forged registration —
+     * so it is an InvalidConfiguration, not something catchable as an attestation
+     * failure.
+     */
+    public static function invalidClockSkew(string $value, int $max): self
+    {
+        return new self(self::trans('attestation_invalid_clock_skew', [
+            'seconds' => $value,
+            'max' => (string) $max,
+        ]));
+    }
+
+    public static function unreadableAttestationAnchor(string $format, string $path): self
+    {
+        return new self(self::trans('attestation_unreadable_anchor', [
+            'format' => $format,
+            'path' => $path,
+        ]));
     }
 }
