@@ -26,6 +26,7 @@ final class PasskeyResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'aaguid' => $this->aaguid,
+            'attestation_type' => $this->attestation_type,
             'transports' => $this->transports,
             'backup_eligible' => $this->backup_eligible,
             'backup_state' => $this->backup_state,

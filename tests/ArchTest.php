@@ -102,8 +102,10 @@ it('imports no crypto class tagged @internal', function (): void {
     }
 
     // If crypto ever stopped tagging anything @internal this guard would be
-    // vacuous — prove it still has teeth.
-    expect($internal)->not->toBeEmpty();
+    // vacuous — prove it still has teeth, by name.
+    expect($internal)->not->toBeEmpty()
+        ->toContain('RoundlyConsulting\\Crypto\\Signature\\OpenSsl')
+        ->toContain('RoundlyConsulting\\Crypto\\X509\\OpenSslX509');
 
     $offenders = [];
 
@@ -118,6 +120,33 @@ it('imports no crypto class tagged @internal', function (): void {
         foreach ($internal as $class) {
             if (str_contains($contents, 'use '.$class.';')) {
                 $offenders[] = $file->getBasename().' → '.$class;
+            }
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});
+
+/*
+ * A CBOR attStmt's x5c carries RAW DER byte strings; Chain::fromX5c() decodes
+ * base64, which is right for a JOSE x5c header and wrong here. A verifier built
+ * on it would reject every genuine authenticator, so attestation code never
+ * imports it — chains are built from Certificate::fromDer().
+ */
+it('never builds an attestation chain from the base64 x5c helper', function (): void {
+    $offenders = [];
+
+    /** @var SplFileInfo $file */
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__.'/../src/Attestation', FilesystemIterator::SKIP_DOTS)) as $file) {
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+
+        // Tokenised, so the prose warning ABOUT fromX5c in a docblock does not
+        // itself trip the guard — only a real call would.
+        foreach (token_get_all((string) file_get_contents($file->getPathname())) as $token) {
+            if (is_array($token) && $token[0] === T_STRING && $token[1] === 'fromX5c') {
+                $offenders[] = $file->getBasename();
             }
         }
     }

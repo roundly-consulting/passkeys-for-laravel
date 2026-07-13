@@ -5,7 +5,8 @@ declare(strict_types=1);
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Passkeys\Attestation\NoneAttestationVerifier;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
-use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
+use RoundlyConsulting\Passkeys\Enums\AttestationType;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidAttestation;
 
 /**
  * Attestation trust stays here even though the parsed authenticator data is
@@ -17,23 +18,23 @@ function parsedStub(): AuthenticatorData
     return AuthenticatorData::parse(str_repeat("\x00", 32).chr(0x05).pack('N', 0));
 }
 
-it('records the attestation format without verifying the statement', function (): void {
-    $verifier = new NoneAttestationVerifier;
-    $attestation = new AttestationObject(format: 'packed', statement: ['sig' => 'x'], authenticatorData: 'raw');
+it('reports the none attestation type for an empty statement', function (): void {
+    $result = (new NoneAttestationVerifier)->verify(
+        new AttestationObject(format: 'none', statement: [], authenticatorData: 'raw'),
+        parsedStub(),
+        'hash',
+    );
 
-    $verifier->verify($attestation, parsedStub(), 'hash');
-})->throwsNoExceptions();
+    expect($result->format)->toBe('none')
+        ->and($result->type)->toBe(AttestationType::None)
+        ->and($result->type->isChained())->toBeFalse()
+        ->and($result->trustPath)->toBeNull();
+});
 
-it('accepts the none format when unknown formats are rejected', function (): void {
-    $verifier = new NoneAttestationVerifier(rejectUnknownFormat: true);
-    $attestation = new AttestationObject(format: 'none', statement: [], authenticatorData: 'raw');
-
-    $verifier->verify($attestation, parsedStub(), 'hash');
-})->throwsNoExceptions();
-
-it('rejects a non-none format when unknown formats are rejected', function (): void {
-    $verifier = new NoneAttestationVerifier(rejectUnknownFormat: true);
-    $attestation = new AttestationObject(format: 'packed', statement: [], authenticatorData: 'raw');
-
-    $verifier->verify($attestation, parsedStub(), 'hash');
-})->throws(InvalidClientData::class);
+it('rejects a none statement that carries data', function (): void {
+    (new NoneAttestationVerifier)->verify(
+        new AttestationObject(format: 'none', statement: ['sig' => 'x'], authenticatorData: 'raw'),
+        parsedStub(),
+        'hash',
+    );
+})->throws(InvalidAttestation::class, 'empty map');

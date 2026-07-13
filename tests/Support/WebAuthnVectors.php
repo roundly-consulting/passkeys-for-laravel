@@ -130,17 +130,24 @@ final class WebAuthnVectors
 
         $authData = $this->authData($rpId, $flags, $signCount, $attested);
 
+        $clientData = $this->clientDataJson(self::string($options, 'type', 'webauthn.create'), $challenge, $options);
+
         // `attStmt` is handed in already CBOR-encoded so a fixture can carry a
-        // genuine (or deliberately bogus) attestation statement of any shape.
-        $statement = is_string($options['attStmt'] ?? null) ? $options['attStmt'] : CborEncoder::map([]);
+        // bogus statement of any shape; `attStmtFactory` gets the very bytes an
+        // attestation signature is made over — authData ‖ SHA-256(clientDataJSON).
+        $factory = $options['attStmtFactory'] ?? null;
+
+        $statement = match (true) {
+            is_callable($factory) => (string) $factory($authData, hash('sha256', $clientData, true)),
+            is_string($options['attStmt'] ?? null) => $options['attStmt'],
+            default => CborEncoder::map([]),
+        };
 
         $attestationObject = CborEncoder::map([
             [CborEncoder::tstr('fmt'), CborEncoder::tstr(self::string($options, 'fmt', 'none'))],
             [CborEncoder::tstr('attStmt'), $statement],
             [CborEncoder::tstr('authData'), CborEncoder::bstr($authData)],
         ]);
-
-        $clientData = $this->clientDataJson(self::string($options, 'type', 'webauthn.create'), $challenge, $options);
 
         return [
             'id' => Base64Url::encode($this->credentialId),
@@ -194,6 +201,15 @@ final class WebAuthnVectors
             ], static fn (mixed $value): bool => $value !== null),
             'ceremonyId' => self::string($options, 'ceremonyId', 'ceremony'),
         ];
+    }
+
+    /**
+     * Sign with the CREDENTIAL's own key — what a self-attested `packed`
+     * statement is signed with.
+     */
+    public function signWithCredentialKey(string $data): string
+    {
+        return $this->sign($data);
     }
 
     /**

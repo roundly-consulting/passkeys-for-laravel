@@ -9,10 +9,10 @@ use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Crypto\Hash\Digest;
+use RoundlyConsulting\Passkeys\Attestation\AttestationResult;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifier;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
-use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
@@ -31,6 +31,7 @@ use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\UnsupportedAlgorithm;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Support\Aaguid;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 
 /**
@@ -117,8 +118,9 @@ final class VerifyRegistrationAction
             throw UnsupportedAlgorithm::forId($algorithm->value);
         }
 
-        // §7.1.19 — verify (or record) the attestation statement.
-        $this->attestation->verify($attestation, $parsed, $clientDataHash);
+        // §7.1.19 — verify (or record) the attestation statement. The binding is
+        // the trust gate: what it accepts is policy, configured, not decided here.
+        $result = $this->attestation->verify($attestation, $parsed, $clientDataHash);
 
         // §7.1.22 — the credential id must not already be registered.
         $credentialId = Base64Url::encode($parsed->credentialId);
@@ -127,7 +129,7 @@ final class VerifyRegistrationAction
             throw CredentialAlreadyRegistered::make();
         }
 
-        $passkey = $this->persist($user, $response, $parsed, $credentialId, $attestation, $name);
+        $passkey = $this->persist($user, $response, $parsed, $credentialId, $result, $name);
 
         $this->events->dispatch(new PasskeyRegistered($passkey));
 
@@ -190,7 +192,7 @@ final class VerifyRegistrationAction
         RegistrationResponseData $response,
         AuthenticatorData $parsed,
         string $credentialId,
-        AttestationObject $attestation,
+        AttestationResult $result,
         ?string $name,
     ): Passkey {
         /** @var Passkey $passkey */
@@ -200,32 +202,15 @@ final class VerifyRegistrationAction
             'public_key' => $this->crypto->encodePublicKey((string) $parsed->coseKeyBytes),
             'user_handle' => $user->passkeyUserHandle(),
             'transports' => $response->transports,
-            'aaguid' => $this->formatAaguid($parsed->aaguid),
+            'aaguid' => Aaguid::format($parsed->aaguid),
             'sign_count' => $parsed->signCount,
             'name' => $name,
-            'attestation_format' => $attestation->format,
+            'attestation_format' => $result->format,
+            'attestation_type' => $result->type->value,
             'backup_eligible' => $parsed->flags->backupEligible,
             'backup_state' => $parsed->flags->backupState,
         ]);
 
         return $passkey;
-    }
-
-    private function formatAaguid(?string $raw): ?string
-    {
-        if ($raw === null || strlen($raw) !== 16 || $raw === str_repeat("\x00", 16)) {
-            return null;
-        }
-
-        $hex = bin2hex($raw);
-
-        return sprintf(
-            '%s-%s-%s-%s-%s',
-            substr($hex, 0, 8),
-            substr($hex, 8, 4),
-            substr($hex, 12, 4),
-            substr($hex, 16, 4),
-            substr($hex, 20, 12),
-        );
     }
 }
