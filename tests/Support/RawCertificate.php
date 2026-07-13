@@ -29,10 +29,15 @@ final class RawCertificate
     /**
      * @param  string  $extensions  the body of the certificate's `v3` section;
      *                              an empty string mints a v1 certificate
+     * @param  OpenSSLAsymmetricKey|null  $key  the certified key — a weak one mints
+     *                                          a certificate crypto refuses to load
      */
-    public static function mint(string $extensions = '', string $organizationalUnit = PackedVectors::ATTESTATION_OU): self
-    {
-        $key = TestKeys::ec();
+    public static function mint(
+        string $extensions = '',
+        string $organizationalUnit = PackedVectors::ATTESTATION_OU,
+        ?OpenSSLAsymmetricKey $key = null,
+    ): self {
+        $key ??= TestKeys::ec();
         $config = self::writeConfig($extensions);
 
         try {

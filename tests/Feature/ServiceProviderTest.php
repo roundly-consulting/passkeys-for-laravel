@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\Passkeys\Attestation\AppleAttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\AttestationGate;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifierRegistry;
@@ -29,9 +30,10 @@ it('binds the attestation verifier to the trust gate, not to a format', function
 it('registers a verifier for every format it claims to support', function (): void {
     $registry = app(AttestationVerifierRegistry::class);
 
-    expect($registry->formats())->toBe(['none', 'packed'])
+    expect($registry->formats())->toBe(['none', 'packed', 'apple'])
         ->and($registry->for('none'))->toBeInstanceOf(NoneAttestationVerifier::class)
         ->and($registry->for('packed'))->toBeInstanceOf(PackedAttestationVerifier::class)
+        ->and($registry->for('apple'))->toBeInstanceOf(AppleAttestationVerifier::class)
         ->and($registry->for('tpm'))->toBeNull();
 });
 

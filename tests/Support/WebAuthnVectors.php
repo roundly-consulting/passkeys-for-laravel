@@ -32,8 +32,16 @@ final class WebAuthnVectors
 
     public static function es256(): self
     {
-        $key = TestKeys::ec();
+        return self::es256FromKey(TestKeys::ec());
+    }
 
+    /**
+     * A vector whose CREDENTIAL key is one the caller already holds — what an
+     * `apple` fixture needs, because Apple's credential certificate certifies the
+     * credential key itself, so the certificate must be minted over this very key.
+     */
+    public static function es256FromKey(OpenSSLAsymmetricKey $key): self
+    {
         $details = self::details($key);
         $x = str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT);
         $y = str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);

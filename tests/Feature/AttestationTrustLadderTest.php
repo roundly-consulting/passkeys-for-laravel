@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use RoundlyConsulting\Crypto\Signature\Key\EcKey;
 use RoundlyConsulting\Crypto\Testing\TestCertificateChain;
 use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyRegistrationAction;
@@ -16,6 +17,7 @@ use RoundlyConsulting\Passkeys\Exceptions\AttestationUntrusted;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidAttestation;
 use RoundlyConsulting\Passkeys\Exceptions\UnsupportedAttestationFormat;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Tests\Support\AppleVectors;
 use RoundlyConsulting\Passkeys\Tests\Support\PackedVectors;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
@@ -369,6 +371,119 @@ it('enforces validity dates under self too, where anchoring is waived', function
         'attStmtFactory' => $statement,
     ]);
 })->throws(AttestationUntrusted::class, 'expired');
+
+// ── apple (WebAuthn §8.8) ────────────────────────────────────────────────────
+
+/**
+ * An Apple ceremony, end to end. The credential key IS the key the credential
+ * certificate certifies, and the nonce is only knowable once the ceremony's bytes
+ * exist — so the chain is minted mid-ceremony and drops its root into the anchor
+ * path the host is already configured to trust.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function enrolApple(User $user, string $anchorPath, array $overrides = [], ?Closure $tamper = null, bool $withNonce = true): Passkey
+{
+    $key = EcKey::generate();
+    $vectors = WebAuthnVectors::es256FromKey($key->key);
+
+    return enrol($user, $vectors, array_merge([
+        'fmt' => 'apple',
+        // Apple's platform authenticators identify no model: an all-zero AAGUID.
+        'aaguid' => str_repeat("\x00", 16),
+        'attStmtFactory' => AppleVectors::statement(
+            credentialKey: $key,
+            withNonce: $withNonce,
+            tamper: $tamper,
+            writeRootTo: $anchorPath,
+        ),
+    ], $overrides));
+}
+
+function applePath(): string
+{
+    return (string) tempnam(sys_get_temp_dir(), 'passkeys-apple-').'.pem';
+}
+
+it('accepts an apple statement anchored by completion under basic', function (): void {
+    $path = applePath();
+
+    trust([
+        'attestation' => 'direct',
+        'attestation_trust' => 'basic',
+        'attestation_anchors' => ['defaults' => false, 'paths' => ['apple' => [$path]]],
+    ]);
+
+    $passkey = enrolApple($this->user, $path);
+
+    // AnonCA — the grade Apple's anonymous attestation actually establishes.
+    expect($passkey->attestation_format)->toBe('apple')
+        ->and($passkey->attestation_type)->toBe('anonca')
+        ->and($passkey->aaguid)->toBeNull();
+});
+
+it('accepts an un-anchored apple statement under self', function (): void {
+    trust([
+        'attestation' => 'direct',
+        'attestation_trust' => 'self',
+        'attestation_anchors' => ['defaults' => false, 'paths' => []],
+    ]);
+
+    $passkey = enrolApple($this->user, applePath());
+
+    expect($passkey->attestation_type)->toBe('anonca');
+});
+
+it('refuses an apple statement whose nonce is not this ceremony\'s', function (): void {
+    $path = applePath();
+
+    trust([
+        'attestation' => 'direct',
+        'attestation_trust' => 'basic',
+        'attestation_anchors' => ['defaults' => false, 'paths' => ['apple' => [$path]]],
+    ]);
+
+    // A certificate minted over different bytes: a replay, in one closure.
+    enrolApple($this->user, $path, tamper: static fn (string $authData, string $hash): string => $authData.'other');
+})->throws(InvalidAttestation::class, 'nonce');
+
+it('refuses an apple statement with no nonce extension', function (): void {
+    $path = applePath();
+
+    trust([
+        'attestation' => 'direct',
+        'attestation_trust' => 'basic',
+        'attestation_anchors' => ['defaults' => false, 'paths' => ['apple' => [$path]]],
+    ]);
+
+    enrolApple($this->user, $path, withNonce: false);
+})->throws(InvalidAttestation::class, '1.2.840.113635.100.8.2');
+
+it('refuses an apple chain that does not reach the shipped apple root', function (): void {
+    // Defaults ON: the only anchor is Apple's real WebAuthn Root CA, which a
+    // throwaway test chain will never reach. The refusal names the top of the
+    // path presented — an intermediate, because Apple omits the root.
+    trust(['attestation' => 'direct', 'attestation_trust' => 'basic']);
+
+    enrolApple($this->user, applePath());
+})->throws(AttestationUntrusted::class, 'Crypto Test Intermediate CA 1');
+
+it('refuses an apple chain anchored at somebody else\'s root', function (): void {
+    trust(['attestation' => 'direct', 'attestation_trust' => 'basic']);
+    anchor(PackedVectors::chain(), 'apple');
+
+    enrolApple($this->user, applePath());
+})->throws(AttestationUntrusted::class, 'not among the configured trust anchors');
+
+it('records a broken apple statement under ignore without reading it', function (): void {
+    $passkey = enrol($this->user, WebAuthnVectors::es256(), [
+        'fmt' => 'apple',
+        'attStmt' => AppleVectors::attStmt(['not-a-certificate']),
+    ]);
+
+    expect($passkey->attestation_format)->toBe('apple')
+        ->and($passkey->attestation_type)->toBe('none');
+});
 
 // ── AAGUID allow-list (D-C) ──────────────────────────────────────────────────
 
