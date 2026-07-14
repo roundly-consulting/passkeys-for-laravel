@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Actions;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
+use RoundlyConsulting\Crypto\Hash\ConstantTime;
+use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifier;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
-use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\Enums\CeremonyType;
@@ -28,24 +31,29 @@ use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\UnsupportedAlgorithm;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Support\AuthenticatorDataParser;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
-use RoundlyConsulting\Passkeys\Support\CborDecoder;
+use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 
 /**
  * Verifies a registration (attestation) response and persists the credential,
  * following the WebAuthn spec §7.1 registration verification order exactly.
+ *
+ * The primitives (CBOR, COSE, base64url, SHA-256, constant-time compare) belong
+ * to crypto-for-laravel; the ceremony — challenge binding, origin, rpIdHash,
+ * flag policy, algorithm allow-list, attestation trust — stays here.
  */
 final class VerifyRegistrationAction
 {
+    private readonly Digest $digest;
+
     public function __construct(
         private readonly ChallengeRepository $challenges,
-        private readonly AuthenticatorDataParser $authenticatorData,
-        private readonly CborDecoder $cbor,
+        private readonly CredentialCrypto $crypto,
         private readonly AttestationVerifier $attestation,
         private readonly PasskeyConfig $config,
         private readonly Dispatcher $events,
-    ) {}
+    ) {
+        $this->digest = new Digest;
+    }
 
     /**
      * @throws PasskeyException
@@ -70,7 +78,7 @@ final class VerifyRegistrationAction
             throw ChallengeMismatch::ceremonyType();
         }
 
-        if (! hash_equals($challenge->challenge, $clientData->challenge)) {
+        if (! ConstantTime::equals($challenge->challenge, $clientData->challenge)) {
             throw ChallengeMismatch::make();
         }
 
@@ -82,15 +90,15 @@ final class VerifyRegistrationAction
         $this->assertOrigin($clientData, $origins);
 
         // §7.1.12 — hash of clientDataJSON.
-        $clientDataHash = hash('sha256', $response->clientDataJson, true);
+        $clientDataHash = $this->digest->raw($response->clientDataJson);
 
         // §7.1.13 — CBOR-decode the attestation object (trailing-byte strict).
-        $attestation = AttestationObject::fromDecoded($this->cbor->decode($response->attestationObject));
+        $attestation = $this->crypto->attestationObject($response->attestationObject);
 
         // §7.1.14-16 — parse authenticator data, verify rpIdHash + flags.
-        $parsed = $this->authenticatorData->parse($attestation->authenticatorData);
+        $parsed = $this->crypto->authenticatorData($attestation->authenticatorData);
 
-        if (! hash_equals(hash('sha256', $rpId, true), $parsed->rpIdHash)) {
+        if (! ConstantTime::equals($this->digest->raw($rpId), $parsed->rpIdHash)) {
             throw RpIdMismatch::make();
         }
 
@@ -101,8 +109,12 @@ final class VerifyRegistrationAction
             throw InvalidAuthenticatorData::attestedDataMissing();
         }
 
-        if (! in_array($parsed->coseKey->algorithm->value, $this->config->algorithms, true)) {
-            throw UnsupportedAlgorithm::forId($parsed->coseKey->algorithm->value);
+        // The algorithm is read off the credential's own key and held against the
+        // configured allow-list — the response never gets to name one.
+        $algorithm = $this->crypto->coseAlgorithm($parsed->coseKey);
+
+        if (! in_array($algorithm->value, $this->config->algorithms, true)) {
+            throw UnsupportedAlgorithm::forId($algorithm->value);
         }
 
         // §7.1.19 — verify (or record) the attestation statement.
@@ -129,7 +141,7 @@ final class VerifyRegistrationAction
             return;
         }
 
-        if (! hash_equals($challenge->userHandle, $user->passkeyUserHandle())) {
+        if (! ConstantTime::equals($challenge->userHandle, $user->passkeyUserHandle())) {
             throw ChallengeMismatch::userHandle();
         }
     }
@@ -157,7 +169,7 @@ final class VerifyRegistrationAction
         }
     }
 
-    private function assertFlags(ParsedAuthenticatorData $parsed, UserVerification $userVerification): void
+    private function assertFlags(AuthenticatorData $parsed, UserVerification $userVerification): void
     {
         if (! $parsed->flags->userPresent) {
             throw InvalidAuthenticatorData::userPresenceMissing();
@@ -176,7 +188,7 @@ final class VerifyRegistrationAction
     private function persist(
         HasPasskeys $user,
         RegistrationResponseData $response,
-        ParsedAuthenticatorData $parsed,
+        AuthenticatorData $parsed,
         string $credentialId,
         AttestationObject $attestation,
         ?string $name,
@@ -185,7 +197,7 @@ final class VerifyRegistrationAction
         $passkey = $user->passkeys()->create([
             'credential_id' => $credentialId,
             'credential_id_hash' => Passkey::hashCredentialId($credentialId),
-            'public_key' => base64_encode((string) $parsed->coseKeyBytes),
+            'public_key' => $this->crypto->encodePublicKey((string) $parsed->coseKeyBytes),
             'user_handle' => $user->passkeyUserHandle(),
             'transports' => $response->transports,
             'aaguid' => $this->formatAaguid($parsed->aaguid),

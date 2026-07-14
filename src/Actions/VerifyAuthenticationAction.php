@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Actions;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
+use RoundlyConsulting\Crypto\Hash\ConstantTime;
+use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
-use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Enums\CeremonyType;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
@@ -27,29 +30,30 @@ use RoundlyConsulting\Passkeys\Exceptions\SignatureInvalid;
 use RoundlyConsulting\Passkeys\Exceptions\SignCountRegression;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Support\AuthenticatorDataParser;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
-use RoundlyConsulting\Passkeys\Support\CborDecoder;
-use RoundlyConsulting\Passkeys\Support\CoseKey;
-use RoundlyConsulting\Passkeys\Support\SignatureVerifier;
+use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 
 /**
  * Verifies an authentication (assertion) response and advances the sign counter,
  * following the WebAuthn spec §7.2 authentication verification order exactly.
  * Every credential-location miss surfaces a uniform CredentialNotFound so
  * registered users cannot be enumerated.
+ *
+ * The signature is checked against the key of the *stored* credential, so the
+ * algorithm is always the one that credential was registered with — the assertion
+ * never gets to choose it.
  */
 final class VerifyAuthenticationAction
 {
+    private readonly Digest $digest;
+
     public function __construct(
         private readonly ChallengeRepository $challenges,
-        private readonly AuthenticatorDataParser $authenticatorData,
-        private readonly CborDecoder $cbor,
-        private readonly CoseKey $coseKey,
-        private readonly SignatureVerifier $signatures,
+        private readonly CredentialCrypto $crypto,
         private readonly PasskeyConfig $config,
         private readonly Dispatcher $events,
-    ) {}
+    ) {
+        $this->digest = new Digest;
+    }
 
     /**
      * @throws PasskeyException
@@ -76,16 +80,16 @@ final class VerifyAuthenticationAction
             throw ChallengeMismatch::ceremonyType();
         }
 
-        if (! hash_equals($challenge->challenge, $clientData->challenge)) {
+        if (! ConstantTime::equals($challenge->challenge, $clientData->challenge)) {
             throw ChallengeMismatch::make();
         }
 
         $this->assertOrigin($clientData, $origins);
 
         // §7.2.14-17 — verify rpIdHash + flags.
-        $parsed = $this->authenticatorData->parse($response->authenticatorData);
+        $parsed = $this->crypto->authenticatorData($response->authenticatorData);
 
-        if (! hash_equals(hash('sha256', $rpId, true), $parsed->rpIdHash)) {
+        if (! ConstantTime::equals($this->digest->raw($rpId), $parsed->rpIdHash)) {
             throw RpIdMismatch::make();
         }
 
@@ -114,7 +118,7 @@ final class VerifyAuthenticationAction
 
         // A discoverable login carries the user handle; it must match the stored one.
         if ($response->userHandle !== null
-            && ! hash_equals($passkey->user_handle, Base64Url::encode($response->userHandle))) {
+            && ! ConstantTime::equals($passkey->user_handle, Base64Url::encode($response->userHandle))) {
             throw CredentialNotFound::make();
         }
 
@@ -135,7 +139,7 @@ final class VerifyAuthenticationAction
         }
     }
 
-    private function assertFlags(ParsedAuthenticatorData $parsed, UserVerification $userVerification): void
+    private function assertFlags(AuthenticatorData $parsed, UserVerification $userVerification): void
     {
         if (! $parsed->flags->userPresent) {
             throw InvalidAuthenticatorData::userPresenceMissing();
@@ -152,22 +156,14 @@ final class VerifyAuthenticationAction
 
     private function verifySignature(Passkey $passkey, AuthenticationResponseData $response): void
     {
-        $coseBytes = base64_decode($passkey->public_key, true);
+        // The key — and therefore the algorithm — comes from the stored credential,
+        // never from the assertion, which is what makes algorithm confusion
+        // impossible here.
+        $key = $this->crypto->storedPublicKey($passkey);
 
-        if ($coseBytes === false) {
-            throw SignatureInvalid::make();
-        }
+        $signedData = $response->authenticatorData.$this->digest->raw($response->clientDataJson);
 
-        $decoded = $this->cbor->decode($coseBytes);
-
-        if (! is_array($decoded)) {
-            throw SignatureInvalid::make();
-        }
-
-        $key = $this->coseKey->fromDecoded($decoded);
-        $signedData = $response->authenticatorData.hash('sha256', $response->clientDataJson, true);
-
-        if (! $this->signatures->verify($key, $signedData, $response->signature)) {
+        if (! $this->crypto->verify($key, $signedData, $response->signature)) {
             throw SignatureInvalid::make();
         }
     }

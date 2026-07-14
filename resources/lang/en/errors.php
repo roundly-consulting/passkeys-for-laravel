@@ -26,4 +26,5 @@ return [
     'missing_rp_id' => 'A relying party identifier (passkeys.rp.id) must be configured.',
     'empty_origins' => 'At least one allowed origin (passkeys.origins) must be configured.',
     'unsupported_attestation_trust' => 'The ":trust" attestation trust level is not supported; only "ignore" is available.',
+    'unsupported_configured_algorithm' => 'The COSE algorithm ":alg" is not one this relying party accepts (ES256, RS256, EdDSA).',
 ];

@@ -25,4 +25,13 @@ final class InvalidAuthenticatorData extends PasskeyException
     {
         return new self(self::trans('attested_data_missing'));
     }
+
+    /**
+     * The byte structure failed to parse — the crypto layer's reason is carried
+     * through so the cause survives the boundary translation.
+     */
+    public static function because(string $reason): self
+    {
+        return new self(self::trans('invalid_authenticator_data').' ('.$reason.')');
+    }
 }

@@ -6,8 +6,9 @@ namespace RoundlyConsulting\Passkeys\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Crypto\Random\Bytes;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 
 /**
  * @extends Factory<Passkey>
@@ -32,7 +33,7 @@ final class PasskeyFactory extends Factory
      */
     public function definition(): array
     {
-        $credentialId = Base64Url::encode(random_bytes(32));
+        $credentialId = Base64Url::encode(Bytes::generate(32));
 
         return [
             'authenticatable_type' => 'user',
@@ -40,7 +41,7 @@ final class PasskeyFactory extends Factory
             'credential_id' => $credentialId,
             'credential_id_hash' => Passkey::hashCredentialId($credentialId),
             'public_key' => self::ES256_COSE_KEY,
-            'user_handle' => Base64Url::encode(random_bytes(32)),
+            'user_handle' => Base64Url::encode(Bytes::generate(32)),
             'transports' => ['internal', 'hybrid'],
             'aaguid' => $this->faker->uuid(),
             'sign_count' => $this->faker->numberBetween(0, 50),

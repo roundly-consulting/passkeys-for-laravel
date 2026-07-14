@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
-use RoundlyConsulting\Passkeys\Support\Base64Url;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
 
 /**
  * A PublicKeyCredentialDescriptor for the allow/exclude credential lists.

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
 use JsonSerializable;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 
 /**
  * PublicKeyCredentialCreationOptions, serialised to the exact JSON shape

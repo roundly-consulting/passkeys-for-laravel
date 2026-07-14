@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Database\Factories\PasskeyFactory;
 
 /**
@@ -61,10 +62,13 @@ final class Passkey extends Model
     /**
      * Deterministic lookup key for a (potentially long) base64url credential id,
      * so the unique index stays within every database's key-length limit.
+     *
+     * crypto's SHA-256 digest is byte-for-byte the hex digest this column has
+     * always held — an index built before this package used crypto still matches.
      */
     public static function hashCredentialId(string $credentialId): string
     {
-        return hash('sha256', $credentialId);
+        return (new Digest)->hex($credentialId);
     }
 
     public function getTable(): string

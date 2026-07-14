@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Attestation;
 
+use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
-use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 
 /**
@@ -21,7 +21,7 @@ final class NoneAttestationVerifier implements AttestationVerifier
 
     public function verify(
         AttestationObject $attestation,
-        ParsedAuthenticatorData $authenticatorData,
+        AuthenticatorData $authenticatorData,
         string $clientDataHash,
     ): void {
         if ($this->rejectUnknownFormat && $attestation->format !== 'none') {

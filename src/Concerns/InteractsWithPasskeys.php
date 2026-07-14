@@ -6,6 +6,8 @@ namespace RoundlyConsulting\Passkeys\Concerns;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Crypto\Random\Bytes;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
@@ -13,7 +15,6 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 
 /**
  * A drop-in implementation of the HasPasskeys contract.
@@ -81,7 +82,7 @@ trait InteractsWithPasskeys
         }
 
         $bytes = (int) config('passkeys.user.handle_bytes', 32);
-        $handle = Base64Url::encode(random_bytes(max($bytes, 16)));
+        $handle = Base64Url::encode(Bytes::generate(max($bytes, 16)));
 
         $this->setAttribute($column, $handle);
         $this->save();

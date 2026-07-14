@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
+use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
-use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
@@ -19,6 +19,23 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
  */
 final readonly class PasskeyConfig
 {
+    /**
+     * The COSE algorithms this relying party will register and verify.
+     *
+     * crypto-for-laravel's COSE registry is deliberately wider than this (it also
+     * carries ES384 and ES512). A relying party accepts only what it has vetted,
+     * so the configured list is narrowed back to exactly these three — the set
+     * WebAuthn authenticators actually mint — and anything else is rejected at
+     * config-parse time rather than silently accepted through the shared enum.
+     *
+     * @var list<CoseAlgorithm>
+     */
+    public const array SUPPORTED_ALGORITHMS = [
+        CoseAlgorithm::ES256,
+        CoseAlgorithm::RS256,
+        CoseAlgorithm::EdDSA,
+    ];
+
     /**
      * @param  list<string>  $origins
      * @param  list<int>  $algorithms
@@ -71,6 +88,8 @@ final readonly class PasskeyConfig
         if ($algorithms === []) {
             $algorithms = [CoseAlgorithm::ES256->value, CoseAlgorithm::RS256->value];
         }
+
+        self::assertSupportedAlgorithms($algorithms);
 
         $attestationTrust = AttestationTrust::from(is_string($config['attestation_trust'] ?? null) ? $config['attestation_trust'] : 'ignore');
 
@@ -128,6 +147,29 @@ final readonly class PasskeyConfig
         }
 
         return $this->origins;
+    }
+
+    /**
+     * Reject any configured COSE identifier outside {@see SUPPORTED_ALGORITHMS} —
+     * including one crypto knows but this relying party does not — rather than
+     * offering an algorithm the ceremony has never been vetted against.
+     *
+     * @param  list<int>  $algorithms
+     *
+     * @throws InvalidConfiguration
+     */
+    private static function assertSupportedAlgorithms(array $algorithms): void
+    {
+        $supported = array_map(
+            static fn (CoseAlgorithm $algorithm): int => $algorithm->value,
+            self::SUPPORTED_ALGORITHMS,
+        );
+
+        foreach ($algorithms as $algorithm) {
+            if (! in_array($algorithm, $supported, true)) {
+                throw InvalidConfiguration::unsupportedAlgorithm($algorithm);
+            }
+        }
     }
 
     private static function hostFromUrl(?string $url): ?string

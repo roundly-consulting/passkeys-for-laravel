@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Crypto\Codec\InvalidEncodingException;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 
 /**
  * A browser registration (attestation) response, decoded from the host-validated
@@ -54,12 +55,19 @@ final readonly class RegistrationResponseData
 
         $ceremonyId = $payload['ceremonyId'] ?? null;
 
-        return new self(
-            rawId: Base64Url::decode($rawId),
-            clientDataJson: Base64Url::decode($clientDataJson),
-            attestationObject: Base64Url::decode($attestationObject),
-            transports: $transports,
-            ceremonyId: is_string($ceremonyId) ? $ceremonyId : null,
-        );
+        // crypto's base64url codec is strict: it rejects standard-base64 chars,
+        // stray padding and anything outside the alphabet, so a tampered member
+        // never silently decodes into different bytes.
+        try {
+            return new self(
+                rawId: Base64Url::decode($rawId),
+                clientDataJson: Base64Url::decode($clientDataJson),
+                attestationObject: Base64Url::decode($attestationObject),
+                transports: $transports,
+                ceremonyId: is_string($ceremonyId) ? $ceremonyId : null,
+            );
+        } catch (InvalidEncodingException) {
+            throw InvalidClientData::malformed();
+        }
     }
 }
