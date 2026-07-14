@@ -40,7 +40,8 @@ on top.
 composer require roundly-consulting/passkeys-for-laravel
 ```
 
-Publish and run the migration:
+Publish and run the migrations — the package never loads them for you, so publishing is not
+optional:
 
 ```bash
 php artisan vendor:publish --tag="passkeys-migrations"
@@ -88,6 +89,20 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `user.handle_column` | `PASSKEYS_USER_HANDLE_COLUMN` | `passkey_user_handle` | Host column holding the opaque user handle. |
 | `user.name_attribute` | — | `email` | Model attribute used as the account name. |
 | `user.display_name_attribute` | — | `name` | Model attribute used as the display name. |
+| `user.handle_bytes` | — | `32` | Length of the generated opaque user handle, in bytes. |
+| `model` | — | `Passkey::class` | The credential model. Point it at a subclass of `Passkey` to add behaviour; every ceremony resolves it. |
+| `table` | — | `passkeys` | The credential table. Publish the config **before** migrating if you rename it — the migration reads this key. |
+
+## Using your own credential model
+
+Point `passkeys.model` at a subclass of `RoundlyConsulting\Passkeys\Models\Passkey`. The package
+resolves the configured class everywhere — the `passkeys()` relation, both ceremonies, and the
+factory — so registration hands your class back and its model events fire:
+
+```php
+// config/passkeys.php
+'model' => App\Models\Credential::class,
+```
 
 ## Preparing your user model
 
