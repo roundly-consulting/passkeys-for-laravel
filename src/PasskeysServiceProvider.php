@@ -6,7 +6,8 @@ namespace RoundlyConsulting\Passkeys;
 
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Support\ServiceProvider;
+use RoundlyConsulting\PackageToolkit\Package;
+use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
 use RoundlyConsulting\Passkeys\Attestation\AppleAttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\AttestationAnchors;
 use RoundlyConsulting\Passkeys\Attestation\AttestationGate;
@@ -19,12 +20,26 @@ use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
-final class PasskeysServiceProvider extends ServiceProvider
+final class PasskeysServiceProvider extends PackageServiceProvider
 {
+    public function configurePackage(Package $package): void
+    {
+        // 'passkeys' is the CONFIG handle: it keeps config/passkeys.php, the
+        // passkeys-config / -migrations / -translations tags and the `passkeys::`
+        // translation namespace byte-identical to the hand-wired provider.
+        $package
+            ->name('passkeys')
+            ->hasConfigFile()
+            ->hasMigrations()
+            ->hasTranslations()
+            ->contributesToAbout(fn (): array => $this->aboutData());
+    }
+
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/passkeys.php', 'passkeys');
+        parent::register();
 
         $this->app->singleton(PasskeyConfig::class, static function (): PasskeyConfig {
             $config = config('passkeys');
@@ -72,23 +87,89 @@ final class PasskeysServiceProvider extends ServiceProvider
         );
     }
 
-    public function boot(): void
+    /**
+     * The `php artisan about` payload — the strictest secret discipline in the fleet.
+     *
+     * A relying party's configuration IS its credential surface: the RP ID and the
+     * origin allow-list name the host's authentication domain, the anchor paths point
+     * at its trust store, and the AAGUID allow-list names the exact authenticator
+     * models it will admit. None of them are rendered. What ships instead is the
+     * security POSTURE (trust ladder, conveyance, verification requirements), counts,
+     * TTLs, and SET/MISSING presence — enough to diagnose a misconfiguration, never
+     * enough to reconstruct one.
+     *
+     * @return array<string, string>
+     */
+    private function aboutData(): array
     {
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-        $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'passkeys');
+        $anchorPaths = $this->configArray('passkeys.attestation_anchors.paths');
+        $aaguids = $this->configArray('passkeys.aaguids.allowed');
 
-        if ($this->app->runningInConsole()) {
-            $this->publishes([
-                __DIR__.'/../config/passkeys.php' => config_path('passkeys.php'),
-            ], 'passkeys-config');
+        return [
+            'Model' => class_basename(PasskeyModel::class()),
+            'Relying party' => 'id '.$this->presence(config('passkeys.rp.id')).', name '.$this->presence(config('passkeys.rp.name')),
+            'Origins' => $this->countOf('passkeys.origins', 'origin').', cross-origin '.$this->toggle('passkeys.allow_cross_origin'),
+            'Algorithms' => $this->countOf('passkeys.algorithms', 'algorithm'),
+            'User verification' => $this->stringOr('passkeys.user_verification', 'required'),
+            'Resident key' => $this->stringOr('passkeys.resident_key', 'required'),
+            'Ceremony timeout' => $this->intOr('passkeys.timeout_ms', 60_000).'ms',
+            'Challenge' => $this->intOr('passkeys.challenge.bytes', 32).' bytes, TTL '
+                .$this->intOr('passkeys.challenge.ttl', 60).'s, store '
+                .(is_string(config('passkeys.challenge.store')) ? 'CUSTOM' : 'DEFAULT'),
+            'Attestation' => 'conveyance '.$this->stringOr('passkeys.attestation', 'none')
+                .', trust '.$this->stringOr('passkeys.attestation_trust', 'ignore')
+                .', unknown formats '.(config('passkeys.reject_unknown_fmt') === true ? 'REJECTED' : 'ACCEPTED'),
+            'Trust anchors' => 'bundled roots '.($this->boolOr('passkeys.attestation_anchors.defaults', true) ? 'ON' : 'OFF')
+                .', '.count($anchorPaths).' host path(s), skew '
+                .$this->intOr('passkeys.attestation_clock_skew', 60).'s',
+            'AAGUID allow-list' => $aaguids === [] ? 'ANY' : count($aaguids).' allowed',
+            'Sign-count policy' => $this->stringOr('passkeys.sign_count_policy', 'flag'),
+            'User handle' => 'column '.$this->presence(config('passkeys.user.handle_column')).', '
+                .$this->intOr('passkeys.user.handle_bytes', 32).' bytes',
+        ];
+    }
 
-            $this->publishes([
-                __DIR__.'/../database/migrations' => database_path('migrations'),
-            ], 'passkeys-migrations');
+    private function presence(mixed $value): string
+    {
+        return is_string($value) && $value !== '' ? 'SET' : 'MISSING';
+    }
 
-            $this->publishes([
-                __DIR__.'/../resources/lang' => $this->app->langPath('vendor/passkeys'),
-            ], 'passkeys-translations');
-        }
+    private function toggle(string $key): string
+    {
+        return config($key) === true ? 'ON' : 'OFF';
+    }
+
+    private function boolOr(string $key, bool $default): bool
+    {
+        $value = config($key);
+
+        return is_bool($value) ? $value : $default;
+    }
+
+    private function stringOr(string $key, string $default): string
+    {
+        $value = config($key);
+
+        return is_string($value) && $value !== '' ? $value : $default;
+    }
+
+    private function intOr(string $key, int $default): int
+    {
+        $value = config($key);
+
+        return is_numeric($value) ? (int) $value : $default;
+    }
+
+    private function countOf(string $key, string $noun): string
+    {
+        return count($this->configArray($key)).' '.$noun.'(s)';
+    }
+
+    /** @return array<array-key, mixed> */
+    private function configArray(string $key): array
+    {
+        $value = config($key);
+
+        return is_array($value) ? $value : [];
     }
 }
