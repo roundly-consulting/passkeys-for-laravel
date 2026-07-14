@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Event;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Passkeys\Actions\GenerateAuthenticationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyAuthenticationAction;
@@ -21,7 +22,6 @@ use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\SignatureInvalid;
 use RoundlyConsulting\Passkeys\Exceptions\SignCountRegression;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 

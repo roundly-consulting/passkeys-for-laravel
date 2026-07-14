@@ -6,30 +6,19 @@ use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
 use RoundlyConsulting\Passkeys\Enums\CeremonyType;
-use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
-it('exposes the COSE algorithm identifiers', function (): void {
-    expect(CoseAlgorithm::ES256->value)->toBe(-7)
-        ->and(CoseAlgorithm::EdDSA->value)->toBe(-8)
-        ->and(CoseAlgorithm::RS256->value)->toBe(-257);
-});
-
-it('maps each COSE algorithm to its openssl digest', function (): void {
-    expect(CoseAlgorithm::ES256->opensslAlgorithm())->toBe(OPENSSL_ALGO_SHA256)
-        ->and(CoseAlgorithm::RS256->opensslAlgorithm())->toBe(OPENSSL_ALGO_SHA256)
-        ->and(CoseAlgorithm::EdDSA->opensslAlgorithm())->toBe(0);
-});
+// The COSE algorithm registry now lives in crypto-for-laravel; the identifiers
+// this relying party accepts are asserted against it in PasskeyConfigTest.
 
 it('adopts the shared enums-for-laravel helpers on every enum', function (string $enum): void {
-    /** @var class-string<CoseAlgorithm> $enum */
+    /** @var class-string<UserVerification> $enum */
     expect($enum::values()->all())->not->toBeEmpty()
         ->and($enum::options())->not->toBeEmpty()
         ->and($enum::count())->toBeGreaterThan(0);
 })->with([
-    CoseAlgorithm::class,
     UserVerification::class,
     AttestationConveyance::class,
     AttestationTrust::class,

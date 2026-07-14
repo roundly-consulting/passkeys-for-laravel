@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 
 it('decodes a registration response payload into raw bytes', function (): void {
     $payload = [

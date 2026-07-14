@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CredentialDescriptor;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
@@ -9,7 +10,6 @@ use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
-use RoundlyConsulting\Passkeys\Support\Base64Url;
 
 function creationOptions(
     ResidentKey $residentKey = ResidentKey::Required,

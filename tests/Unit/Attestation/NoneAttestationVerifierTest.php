@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Passkeys\Attestation\NoneAttestationVerifier;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
-use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticatorFlags;
-use RoundlyConsulting\Passkeys\DataTransferObjects\ParsedAuthenticatorData;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 
-function parsedStub(): ParsedAuthenticatorData
+/**
+ * Attestation trust stays here even though the parsed authenticator data is
+ * crypto's — the statement is a trust decision, not an algorithm.
+ */
+function parsedStub(): AuthenticatorData
 {
-    return new ParsedAuthenticatorData(
-        rpIdHash: str_repeat("\x00", 32),
-        flags: AuthenticatorFlags::fromByte(0x45),
-        signCount: 0,
-    );
+    // rpIdHash ‖ flags (UP|UV) ‖ signCount — no attested credential data.
+    return AuthenticatorData::parse(str_repeat("\x00", 32).chr(0x05).pack('N', 0));
 }
 
 it('records the attestation format without verifying the statement', function (): void {

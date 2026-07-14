@@ -3,11 +3,9 @@
 declare(strict_types=1);
 
 use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
-use RoundlyConsulting\Passkeys\DataTransferObjects\CoseKeyData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\CeremonyType;
-use RoundlyConsulting\Passkeys\Enums\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
 it('serialises challenge data to an array and back', function (): void {
@@ -64,14 +62,6 @@ it('carries a null user handle for an authentication ceremony', function (): voi
     );
 
     expect($data->toArray()['user_handle'])->toBeNull();
-});
-
-it('holds ES256 verification material as an SPKI PEM', function (): void {
-    $key = new CoseKeyData(algorithm: CoseAlgorithm::ES256, pem: 'pem');
-
-    expect($key->algorithm)->toBe(CoseAlgorithm::ES256)
-        ->and($key->pem)->toBe('pem')
-        ->and($key->edwardsPublicKey)->toBeNull();
 });
 
 it('defaults registration overrides to null members', function (): void {

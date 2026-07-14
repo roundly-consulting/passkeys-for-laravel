@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Passkeys\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
+use RoundlyConsulting\Crypto\CryptoServiceProvider;
 use RoundlyConsulting\Passkeys\PasskeysServiceProvider;
 
 abstract class TestCase extends Orchestra
@@ -16,7 +17,9 @@ abstract class TestCase extends Orchestra
      */
     protected function getPackageProviders($app): array
     {
-        return [PasskeysServiceProvider::class];
+        // crypto-for-laravel auto-registers in a host app; register it explicitly
+        // here so the ceremonies run against its real container bindings.
+        return [CryptoServiceProvider::class, PasskeysServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void
