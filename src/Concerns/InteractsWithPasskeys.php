@@ -15,6 +15,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
 /**
  * A drop-in implementation of the HasPasskeys contract.
@@ -35,7 +36,7 @@ trait InteractsWithPasskeys
      */
     public function passkeys(): MorphMany
     {
-        return $this->morphMany(Passkey::class, 'authenticatable');
+        return $this->morphMany(PasskeyModel::class(), 'authenticatable');
     }
 
     /**

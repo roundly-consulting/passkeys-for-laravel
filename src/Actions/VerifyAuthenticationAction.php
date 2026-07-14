@@ -31,6 +31,7 @@ use RoundlyConsulting\Passkeys\Exceptions\SignCountRegression;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
 /**
  * Verifies an authentication (assertion) response and advances the sign counter,
@@ -110,7 +111,7 @@ final class VerifyAuthenticationAction
     {
         $credentialId = Base64Url::encode($response->rawId);
 
-        $passkey = Passkey::query()->forCredentialId($credentialId)->first();
+        $passkey = PasskeyModel::query()->forCredentialId($credentialId)->first();
 
         if ($passkey === null) {
             throw CredentialNotFound::make();

@@ -33,6 +33,7 @@ use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\Aaguid;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
 /**
  * Verifies a registration (attestation) response and persists the credential,
@@ -125,7 +126,7 @@ final class VerifyRegistrationAction
         // §7.1.22 — the credential id must not already be registered.
         $credentialId = Base64Url::encode($parsed->credentialId);
 
-        if (Passkey::query()->forCredentialId($credentialId)->withTrashed()->exists()) {
+        if (PasskeyModel::query()->forCredentialId($credentialId)->withTrashed()->exists()) {
             throw CredentialAlreadyRegistered::make();
         }
 

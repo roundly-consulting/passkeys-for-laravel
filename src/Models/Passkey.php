@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Database\Factories\PasskeyFactory;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
 /**
  * A stored WebAuthn credential (passkey).
@@ -36,8 +37,12 @@ use RoundlyConsulting\Passkeys\Database\Factories\PasskeyFactory;
  * @property CarbonInterface|null $updated_at
  * @property CarbonInterface|null $deleted_at
  * @property-read Model $authenticatable
+ *
+ * Not `final`: `passkeys.model` documents pointing the package at a subclass, and a
+ * `final` model makes that seam impossible to use. Resolve it through
+ * {@see PasskeyModel}, never by naming this class.
  */
-final class Passkey extends Model
+class Passkey extends Model
 {
     /** @use HasFactory<PasskeyFactory> */
     use HasFactory;

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Random\Bytes;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
 /**
  * @extends Factory<Passkey>
@@ -16,6 +17,18 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
 final class PasskeyFactory extends Factory
 {
     protected $model = Passkey::class;
+
+    /**
+     * Build the CONFIGURED model, not the packaged one: a host that swaps
+     * `passkeys.model` gets its own class out of the factory too, so the fake and
+     * the seeded fixtures match what a real ceremony persists.
+     *
+     * @return class-string<Passkey>
+     */
+    public function modelName(): string
+    {
+        return PasskeyModel::class();
+    }
 
     /**
      * A valid ES256 (P-256) COSE key, base64-encoded, so a factory-built passkey
