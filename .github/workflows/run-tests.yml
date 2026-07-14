@@ -29,7 +29,8 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, fileinfo, openssl
+          # sodium is explicit: the EdDSA (Ed25519) credential vectors need it.
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, fileinfo, openssl, sodium
           coverage: pcov
 
       - name: Setup problem matchers
@@ -47,5 +48,8 @@ jobs:
       - name: List Installed Dependencies
         run: composer show -D
 
+      - name: Audit dependencies for known vulnerabilities
+        run: composer audit
+
       - name: Execute tests
-        run: vendor/bin/pest --coverage --min=90
+        run: vendor/bin/pest --coverage --min=95
