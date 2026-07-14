@@ -14,7 +14,9 @@ return new class extends Migration
         // null — an honest value, not a guess. No existing column is touched:
         // credential_id (unpadded base64url) and public_key (padded base64) are
         // what every authenticator's other half is bound to.
-        Schema::table('passkeys', function (Blueprint $table): void {
+        $name = config('passkeys.table');
+
+        Schema::table(is_string($name) ? $name : 'passkeys', function (Blueprint $table): void {
             $table->string('attestation_type', 16)->nullable()->after('attestation_format');
         });
     }

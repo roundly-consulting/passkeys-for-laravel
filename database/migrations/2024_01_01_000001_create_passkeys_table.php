@@ -10,7 +10,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('passkeys', function (Blueprint $table): void {
+        // The table name is config-driven (`passkeys.table`, which the model reads):
+        // a host that renames it must get the table it configured, not a `passkeys`
+        // table its model will never look at.
+        $name = config('passkeys.table');
+
+        Schema::create(is_string($name) ? $name : 'passkeys', function (Blueprint $table): void {
             $table->id();
             $table->morphs('authenticatable');
             // A roaming security key's credential id can reach ~1364 base64url
