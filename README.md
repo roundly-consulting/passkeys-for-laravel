@@ -7,19 +7,31 @@
 # Passkeys for Laravel
 
 A native **WebAuthn / FIDO2 passkey relying party** for Laravel — register and authenticate
-passkeys with **no third-party crypto dependencies**. CBOR/COSE decoding, attestation and
-assertion verification, and ES256/RS256 signature checks are all implemented in-package against
-the [WebAuthn Level 2](https://www.w3.org/TR/webauthn-2/) specification.
+passkeys with **no third-party crypto dependencies**. The registration and authentication
+ceremonies follow the [WebAuthn Level 2](https://www.w3.org/TR/webauthn-2/) specification, and
+ES256 / RS256 / EdDSA credentials are all supported.
 
 The package is deliberately **controller-less**: it ships actions, DTOs, a model, a challenge
-store, native crypto primitives, and events, so your application wires its own HTTP endpoints
-(stateless or session-based) on top.
+store, and events, so your application wires its own HTTP endpoints (stateless or session-based)
+on top.
+
+## Integrates with
+
+- **[crypto-for-laravel](https://github.com/roundly-consulting/crypto-for-laravel)** — the
+  cryptography this relying party runs on: CBOR/COSE decoding, COSE key parsing, ECDSA DER↔raw
+  conversion, RSA/ECDSA/Ed25519 signature verification, base64url, SHA-256 and constant-time
+  comparison. It is a hard dependency, installed automatically; there is nothing to configure.
+  Passkeys keeps what is genuinely its own — the **ceremony**: challenge binding, origin and RP ID
+  validation, user-presence/verification policy, sign-counter reconciliation, and attestation
+  trust.
+- **[enums-for-laravel](https://github.com/roundly-consulting/enums-for-laravel)** — the shared
+  enum helpers (`values()`, `options()`, …) on this package's enums.
 
 ## Requirements
 
 - PHP 8.4+
 - Laravel 12 or 13
-- `ext-openssl`, `ext-json`
+- `ext-json`
 - `ext-sodium` (optional — only for Ed25519 / EdDSA verification)
 
 ## Installation
@@ -187,12 +199,19 @@ because it needs `ext-sodium`. Once that extension is installed on every host th
 credentials, add it to `config/passkeys.php`:
 
 ```php
+use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
+
 'algorithms' => [
     CoseAlgorithm::ES256->value,   // -7
     CoseAlgorithm::RS256->value,   // -257
     CoseAlgorithm::EdDSA->value,   // -8 (requires ext-sodium)
 ],
 ```
+
+The COSE registry comes from `crypto-for-laravel`. This relying party accepts **only** ES256,
+RS256 and EdDSA (`PasskeyConfig::SUPPORTED_ALGORITHMS`) — configuring any other identifier throws
+`InvalidConfiguration` at boot rather than offering an algorithm the ceremony has not been vetted
+against.
 
 ### Managing credentials
 
@@ -245,9 +264,12 @@ Listen to drive audit trails and anomaly handling:
   registration verifier rejects a response for a different user (defense-in-depth for
   admin-on-behalf flows).
 - **Origin allow-list** and **RP ID hash** validation on every ceremony.
-- **Constant-time challenge comparison** (`hash_equals`).
-- **Signature verification** via `ext-openssl` (ES256 with DER↔raw handling, RS256); an
-  `openssl_verify` error is treated as a failure, never a pass.
+- **Constant-time challenge comparison** (crypto's `ConstantTime::equals`).
+- **Signature verification** through `crypto-for-laravel` (ES256 with DER↔raw handling, RS256,
+  Ed25519); a verification error is treated as a failure, never a pass.
+- **No algorithm confusion** — the verification algorithm is read from the **stored credential's**
+  own COSE key, never from the assertion, and the configured allow-list is enforced at
+  registration.
 - **Sign-counter regression** policy (`reject` or `flag` + event) to surface cloned authenticators.
 - **No user enumeration** — every authentication miss returns a uniform "credential not found".
 - **Backup-eligibility consistency** (a backed-up credential must be backup-eligible).
