@@ -1,6 +1,6 @@
 {
     "name": "roundly-consulting/passkeys-for-laravel",
-    "description": "A native WebAuthn / FIDO2 passkey relying party for Laravel — registration and authentication ceremonies with ES256/RS256, zero third-party crypto dependencies.",
+    "description": "A native WebAuthn / FIDO2 passkey relying party for Laravel — registration and authentication ceremonies with ES256/RS256/EdDSA, zero third-party crypto dependencies.",
     "keywords": [
         "roundly-consulting",
         "laravel",
@@ -21,12 +21,12 @@
     "require": {
         "php": "^8.4",
         "ext-json": "*",
-        "ext-openssl": "*",
         "illuminate/cache": "^12.0|^13.0",
         "illuminate/contracts": "^12.0|^13.0",
         "illuminate/database": "^12.0|^13.0",
         "illuminate/events": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0",
+        "roundly-consulting/crypto-for-laravel": "@dev",
         "roundly-consulting/enums-for-laravel": "@dev"
     },
     "require-dev": {
@@ -40,6 +40,18 @@
         "ext-sodium": "Enables optional Ed25519 (EdDSA / COSE -8) signature verification."
     },
     "repositories": [
+        {
+            "type": "path",
+            "url": "../crypto-for-laravel*",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/roundly-consulting/crypto-for-laravel",
+            "no-api": true
+        },
         {
             "type": "path",
             "url": "../enums-for-laravel*",
@@ -68,7 +80,7 @@
         "format": "vendor/bin/pint",
         "analyse": "vendor/bin/phpstan analyse --no-progress",
         "test": "vendor/bin/pest",
-        "test-coverage": "vendor/bin/pest --coverage --min=90"
+        "test-coverage": "vendor/bin/pest --coverage --min=95"
     },
     "config": {
         "sort-packages": true,
