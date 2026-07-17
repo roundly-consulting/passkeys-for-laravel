@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Passkeys;
 
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Foundation\Application;
+use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
 use RoundlyConsulting\Passkeys\Attestation\AppleAttestationVerifier;
@@ -24,6 +25,8 @@ use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
 final class PasskeysServiceProvider extends PackageServiceProvider
 {
+    use RegistersBlueprintMacros;
+
     public function configurePackage(Package $package): void
     {
         // 'passkeys' is the CONFIG handle: it keeps config/passkeys.php, the
@@ -85,6 +88,15 @@ final class PasskeysServiceProvider extends PackageServiceProvider
             PasskeyService::class,
             static fn (Application $app): PasskeyManager => $app->make(PasskeyManager::class),
         );
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        // The migration's key-type-aware authenticatable morph is a macro, so it must
+        // exist before a host runs `php artisan migrate`.
+        $this->registerBlueprintMacros();
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 
 return new class extends Migration
 {
@@ -15,9 +16,13 @@ return new class extends Migration
         // table its model will never look at.
         $name = config('passkeys.table');
 
-        Schema::create(is_string($name) ? $name : 'passkeys', function (Blueprint $table): void {
+        // Silently falls back to bigint for an unrecognized value, so a typo in
+        // the host's config never leaves the package unable to migrate.
+        $keyType = KeyType::fromConfig('passkeys.key_type');
+
+        Schema::create(is_string($name) ? $name : 'passkeys', function (Blueprint $table) use ($keyType): void {
             $table->id();
-            $table->morphs('authenticatable');
+            $table->morphKey('authenticatable', $keyType, nullable: false);
             // A roaming security key's credential id can reach ~1364 base64url
             // chars (spec allows up to 1023 raw bytes), which overflows a
             // varchar(255). Store it as text and key the unique index on a

@@ -15,11 +15,13 @@ declare(strict_types=1);
  *    nothing. media #27's size cap that never applied is the same bug with lower stakes.
  */
 it('ships exactly the config keys it reads', function (): void {
-    expect(__DIR__.'/../../config/passkeys.php')->toSatisfyConfigContract(__DIR__.'/../../src', [
+    expect(__DIR__.'/../../config/passkeys.php')->toSatisfyConfigContract([__DIR__.'/../../src', __DIR__.'/../../database'], [
         // `passkeys.model` is read through the toolkit's ModelResolver seam
-        // (`PasskeyModel::class()`) rather than a literal `config()` call. It is a real read —
-        // it drives the whole model swap — but it is not a `config(` token, so the prefix is
-        // what makes it visible to the scraper.
+        // (`PasskeyModel::class()`) rather than a literal `config()` call, and
+        // `passkeys.key_type` through `KeyType::fromConfig(…)` in the migration (database/ is
+        // scanned above). Both are real reads — one drives the model swap, the other the
+        // authenticatable morph column type — but neither is a `config(` token, so the prefix
+        // is what makes them visible to the scraper.
         'extraReadPrefixes' => ['passkeys.'],
 
         // Deliberately NO `excludeFromReverse` for the provider. PasskeysServiceProvider is

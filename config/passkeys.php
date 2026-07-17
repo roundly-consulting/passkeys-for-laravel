@@ -189,4 +189,20 @@ return [
     'model' => Passkey::class,
     'table' => 'passkeys',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Key type (authenticatable morph)
+    |--------------------------------------------------------------------------
+    |
+    | The key type used for the polymorphic "authenticatable" column. Use "uuid"
+    | or "ulid" when the models that own passkeys (typically your User) use
+    | UUID/ULID primary keys, otherwise leave it as "bigint". Anything
+    | unrecognized falls back to "bigint". Your authenticatable models must share
+    | one key type.
+    |
+    | Supported: "bigint", "uuid", "ulid"
+    |
+    */
+    'key_type' => env('PASSKEYS_KEY_TYPE', 'bigint'),
+
 ];

@@ -1,5 +1,6 @@
 includes:
     - vendor/larastan/larastan/extension.neon
+    - vendor/roundly-consulting/package-toolkit-for-laravel/extension.neon
 parameters:
     level: 7
     paths:
