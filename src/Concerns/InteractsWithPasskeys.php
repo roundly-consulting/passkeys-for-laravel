@@ -75,7 +75,7 @@ trait InteractsWithPasskeys
      */
     public function passkeyUserHandle(): string
     {
-        $column = $this->passkeyConfigString('user.handle_column', 'passkey_user_handle');
+        $column = $this->passkeyConfigString('passkeys.user.handle_column', 'passkey_user_handle');
         $existing = $this->getAttribute($column);
 
         if (is_string($existing) && $existing !== '') {
@@ -93,21 +93,27 @@ trait InteractsWithPasskeys
 
     public function passkeyUserName(): string
     {
-        $attribute = $this->passkeyConfigString('user.name_attribute', 'email');
+        $attribute = $this->passkeyConfigString('passkeys.user.name_attribute', 'email');
 
         return (string) ($this->getAttribute($attribute) ?? $this->getKey());
     }
 
     public function passkeyDisplayName(): string
     {
-        $attribute = $this->passkeyConfigString('user.display_name_attribute', 'name');
+        $attribute = $this->passkeyConfigString('passkeys.user.display_name_attribute', 'name');
 
         return (string) ($this->getAttribute($attribute) ?? $this->passkeyUserName());
     }
 
+    /**
+     * Callers pass the FULL literal key rather than a suffix concatenated onto 'passkeys.'
+     * here. A concatenated key cannot be checked against the shipped config file, which is
+     * the exact shape that let shops #18 read a key the package never shipped while its suite
+     * stayed green. Naming each key whole makes every read verifiable at its call site.
+     */
     private function passkeyConfigString(string $key, string $default): string
     {
-        $value = config('passkeys.'.$key);
+        $value = config($key);
 
         return is_string($value) && $value !== '' ? $value : $default;
     }

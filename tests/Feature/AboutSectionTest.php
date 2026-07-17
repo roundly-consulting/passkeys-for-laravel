@@ -2,80 +2,54 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Facades\Artisan;
-
 /**
- * `php artisan about` must describe the relying party without ever leaking its credential
- * surface: the RP ID, the origin allow-list, the trust-anchor paths and the AAGUID
- * allow-list are reported by posture, presence and count — never by value.
+ * The secret-safe `about` capture (A).
+ *
+ * Purchases #13 is the bug this exists for: the fleet's most credential-heavy `about`
+ * section was guarded by negative assertions against `app(Kernel::class)->output()`, which
+ * returns `''`. Every "does not leak" check was vacuous — passing against empty output.
+ *
+ * Passkeys' section is written to report the *shape* of the ceremony policy — counts,
+ * toggles, bounds — and never host topology. The two real risks here are an absolute
+ * filesystem path to a trust-anchor PEM (which maps the host's disk) and the AAGUID
+ * allow-list (which fingerprints exactly which authenticator models an org issues). Both are
+ * reported by count.
+ *
+ * `mustRender` is required and non-empty, so the negative half can never pass over empty
+ * output, and its entries deliberately do not overlap the secret surface.
  */
-it('reports the relying party posture in the about command', function (): void {
-    Artisan::call('about', ['--only' => 'passkeys']);
-
-    $rendered = Artisan::output();
-
-    expect($rendered)->toContain('Attestation')
-        ->and($rendered)->toContain('trust ignore')
-        ->and($rendered)->toContain('Sign-count policy')
-        ->and($rendered)->toContain('2 algorithm(s)');
-});
-
-it('never renders the rp id, origins, anchor paths or allowed aaguids', function (): void {
-    config()->set('passkeys.rp.id', 'auth.acme-internal.example');
-    config()->set('passkeys.rp.name', 'ACME Internal SSO');
-    config()->set('passkeys.origins', ['https://auth.acme-internal.example', 'https://admin.acme-internal.example']);
-    config()->set('passkeys.challenge.store', 'acme-tenant-redis');
-    config()->set('passkeys.user.handle_column', 'acme_webauthn_handle');
+it('renders the passkeys section without leaking anchors or aaguids', function (): void {
     config()->set('passkeys.attestation_anchors.paths', [
-        'packed' => ['/srv/acme/secrets/yubico-ca.pem'],
+        'packed' => ['/srv/secrets/webauthn/acme-fido-root.pem'],
     ]);
     config()->set('passkeys.aaguids.allowed', [
-        'ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4',
         'd8522d9f-575b-4866-88a9-ba99fa02f35b',
+        'ee882879-721c-4913-9775-3dfcce97072a',
     ]);
 
-    Artisan::call('about', ['--only' => 'passkeys']);
+    expect('passkeys')->toLeakNoSecrets(
+        secrets: [
+            // Host topology — an absolute path on the host's filesystem.
+            '/srv/secrets/webauthn/acme-fido-root.pem',
+            'acme-fido-root.pem',
 
-    $rendered = Artisan::output();
-
-    // Guard the guard: `app(Kernel::class)->output()` returns '' — an empty capture would
-    // make every negative assertion below pass against nothing. Prove we captured a section
-    // first, on the most credential-heavy package in the fleet.
-    expect($rendered)->toContain('Sign-count policy')
-        ->and($rendered)->toContain('AAGUID allow-list');
-
-    expect($rendered)
-        ->not->toContain('auth.acme-internal.example')
-        ->not->toContain('admin.acme-internal.example')
-        ->not->toContain('ACME Internal SSO')
-        ->not->toContain('acme-tenant-redis')
-        ->not->toContain('acme_webauthn_handle')
-        ->not->toContain('yubico-ca.pem')
-        ->not->toContain('/srv/acme/secrets')
-        ->not->toContain('ea9b8d66')
-        ->not->toContain('d8522d9f');
-
-    // What it reports instead: posture, presence and counts.
-    expect($rendered)
-        ->toContain('2 origin(s)')
-        ->toContain('id SET, name SET')
-        ->toContain('1 host path(s)')
-        ->toContain('2 allowed')
-        ->toContain('CUSTOM');
-});
-
-it('reports a missing relying party rather than inventing one', function (): void {
-    config()->set('passkeys.rp.id', null);
-    config()->set('passkeys.origins', []);
-    config()->set('passkeys.aaguids.allowed', []);
-    config()->set('passkeys.challenge.store', null);
-
-    Artisan::call('about', ['--only' => 'passkeys']);
-
-    $rendered = Artisan::output();
-
-    expect($rendered)->toContain('id MISSING')
-        ->and($rendered)->toContain('0 origin(s)')
-        ->and($rendered)->toContain('ANY')
-        ->and($rendered)->toContain('DEFAULT');
+            // The AAGUID allow-list fingerprints the exact authenticator models an
+            // organisation issues. Reported as a count, never enumerated.
+            'd8522d9f-575b-4866-88a9-ba99fa02f35b',
+            'ee882879-721c-4913-9775-3dfcce97072a',
+        ],
+        mustRender: [
+            // The positive proof the section reports rather than sitting empty.
+            'Model',
+            'Relying party',
+            'Origins',
+            'Algorithms',
+            'User verification',
+            'Sign-count policy',
+            // The count-not-entries lines really render their counts — which is what makes
+            // hiding the entries meaningful rather than accidental.
+            '1 host path(s)',
+            '2 allowed',
+        ],
+    );
 });

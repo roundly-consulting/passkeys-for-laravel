@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
+use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Testing\Arch\ArchPresets;
+
 // Independence guard: the production relying party must implement WebAuthn/FIDO2
 // on our own crypto-for-laravel and never reach for a third-party crypto, CBOR,
 // or WebAuthn library. Allow-listing the permitted roots bans every other vendor
@@ -156,10 +160,6 @@ it('never builds an attestation chain from the base64 x5c helper', function (): 
     expect($offenders)->toBe([]);
 });
 
-arch('src declares strict types')
-    ->expect('RoundlyConsulting\Passkeys')
-    ->toUseStrictTypes();
-
 arch('actions are final')
     ->expect('RoundlyConsulting\Passkeys\Actions')
     ->toBeClasses()
@@ -179,6 +179,62 @@ arch('exceptions extend the package base exception')
     ->toExtend('RoundlyConsulting\Passkeys\Exceptions\PasskeyException')
     ->ignoring('RoundlyConsulting\Passkeys\Exceptions\PasskeyException');
 
-arch('no debugging leftovers')
-    ->expect(['dd', 'dump', 'ray', 'var_dump', 'print_r'])
-    ->not->toBeUsed();
+/*
+|--------------------------------------------------------------------------
+| The shared presets
+|--------------------------------------------------------------------------
+|
+| These replace the generic rules every package needs. The bespoke rules above
+| are KEPT: the vendor-root guard, the crypto-primitive ban, the @internal-import
+| guard and the x5c guard have no preset equivalent and encode this package's own
+| independence and correctness decisions.
+|
+| Note the deliberate overlap: `noLocalCryptoPrimitives` and the hand-written ban
+| above both police re-implemented primitives. The local list is STRICTER (it also
+| bans openssl_*, sodium_*, random_*, base64_*, and `hash_equals`) and it stays
+| authoritative. `hash_equals` was removed from the shared preset — the argument
+| being that `->ignoring()` is class-scoped, so one correct call blinds a whole
+| class to the other primitives — but that argument is about the shared list, not
+| about this package, which routes constant-time comparison through crypto's
+| wrapper and exempts nothing. Leaving the local ban intact is a crypto policy
+| decision and is not this row's to reverse.
+*/
+ArchPresets::strictTypes('RoundlyConsulting\Passkeys');
+
+/**
+ * Exempt from finality, each deliberately:
+ *  - Passkey — `passkeys.model` invites a host subclass; `final` is a PHP fatal the moment a
+ *    host uses the documented seam. Pinned positively below.
+ *  - PasskeyException — the base every passkeys error extends, so a host can catch the whole
+ *    surface with one type.
+ */
+ArchPresets::finalByDefault('RoundlyConsulting\Passkeys')
+    ->ignoring([
+        Passkey::class,
+        PasskeyException::class,
+    ]);
+
+/**
+ * The counter-weight, and the fleet's 7×-shipped fatal: `final` on a config-swappable model.
+ * Also pins that `passkeys.model` really defaults to the packaged model, so the seam cannot
+ * rot in the other direction either.
+ */
+ArchPresets::swappableModelsAreNotFinal([
+    Passkey::class => 'passkeys.model',
+]);
+
+/**
+ * `passkeys.model` resolves through the PasskeyModel seam in Support. Adopted on the
+ * pre-classified rule (Swap? > 0): passkeys has the shape the preset targets — a real
+ * Eloquent model behind a `*_model`-style key, every call site going through the seam.
+ */
+ArchPresets::modelsResolveThroughSeam(__DIR__.'/../src', 'Support', ['passkeys.model']);
+
+/**
+ * The Dependency Policy as a test. No `alsoAllow`: passkeys' `require` ships only
+ * php/ext-json/illuminate/roundly, and the workflow installs test tooling with `--dev`. If
+ * this goes red the graph is wrong — never widen the allow-list to quiet it.
+ */
+ArchPresets::runtimeRequireIsWhitelisted(__DIR__.'/../composer.json');
+
+ArchPresets::noDebuggingLeftovers();

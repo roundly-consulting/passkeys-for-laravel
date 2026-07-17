@@ -23,7 +23,7 @@ use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 beforeEach(function (): void {
     config()->set('passkeys.model', CustomPasskey::class);
 
-    CustomPasskey::$created = 0;
+    CustomPasskey::resetCreationCount();
 
     $this->user = User::query()->create(['name' => 'Ada', 'email' => 'ada@example.com']);
 });
@@ -67,7 +67,7 @@ it('persists a registration as the configured model and fires its events', funct
 
     expect($passkey)->toBeInstanceOf(CustomPasskey::class)
         // The `created` event of the CONFIGURED class fired — the whole point of the seam.
-        ->and(CustomPasskey::$created)->toBe(1);
+        ->and(CustomPasskey::creationCount())->toBe(1);
 });
 
 it('returns the configured model from an authentication ceremony', function (): void {

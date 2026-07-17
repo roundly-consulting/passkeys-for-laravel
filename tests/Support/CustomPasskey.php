@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Tests\Support;
 
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Testing\Fixtures\Concerns\CountsCreations;
 
 /**
  * A host's own credential model, as `passkeys.model` documents. Exists to prove the seam
@@ -13,17 +14,17 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
  */
 final class CustomPasskey extends Passkey
 {
-    public static int $created = 0;
+    /**
+     * Replaces a hand-rolled `public static int $created` + a booted() hook that counted the
+     * same thing. Counting `created` events on this exact class is the independent oracle a
+     * swap really took effect — `instanceof` passes for a row created as the PACKAGED class,
+     * which never fires the events a host hangs revocation/audit logic on. Without this trait
+     * `toHonourModelSwap` silently downgrades to that weaker check.
+     */
+    use CountsCreations;
 
     public function revoked(): bool
     {
         return $this->trashed();
-    }
-
-    protected static function booted(): void
-    {
-        self::created(static function (): void {
-            self::$created++;
-        });
     }
 }
