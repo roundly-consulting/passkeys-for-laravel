@@ -1,6 +1,6 @@
 {
     "name": "roundly-consulting/passkeys-for-laravel",
-    "description": "A native WebAuthn / FIDO2 passkey relying party for Laravel — registration and authentication ceremonies with ES256/RS256/EdDSA, zero third-party crypto dependencies.",
+    "description": "A native WebAuthn / FIDO2 passkey relying party for Laravel \u2014 registration and authentication ceremonies with ES256/RS256/EdDSA, zero third-party crypto dependencies.",
     "keywords": [
         "roundly-consulting",
         "laravel",
@@ -35,7 +35,8 @@
         "laravel/pint": "^1.0",
         "nunomaduro/collision": "^8.0",
         "orchestra/testbench": "^10.0|^11.0",
-        "pestphp/pest": "^4.0"
+        "pestphp/pest": "^4.0",
+        "roundly-consulting/testing-for-laravel": "@dev"
     },
     "suggest": {
         "ext-sodium": "Enables optional Ed25519 (EdDSA / COSE -8) signature verification."
@@ -75,6 +76,18 @@
         {
             "type": "vcs",
             "url": "https://github.com/roundly-consulting/package-toolkit-for-laravel",
+            "no-api": true
+        },
+        {
+            "type": "path",
+            "url": "../testing-for-laravel*",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/roundly-consulting/testing-for-laravel",
             "no-api": true
         }
     ],

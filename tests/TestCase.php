@@ -6,44 +6,58 @@ namespace RoundlyConsulting\Passkeys\Tests;
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase as Orchestra;
+use Illuminate\Support\ServiceProvider;
 use RoundlyConsulting\Crypto\CryptoServiceProvider;
 use RoundlyConsulting\Passkeys\PasskeysServiceProvider;
+use RoundlyConsulting\Testing\PackageTestCase;
 
-abstract class TestCase extends Orchestra
+abstract class TestCase extends PackageTestCase
 {
     /**
-     * @return array<int, class-string>
+     * crypto-for-laravel auto-registers in a host app; the suite lists it explicitly so the
+     * ceremonies run against its real container bindings rather than a fiction.
+     *
+     * @return list<class-string<ServiceProvider>>
      */
-    protected function getPackageProviders($app): array
+    protected function packageProviders(): array
     {
-        // crypto-for-laravel auto-registers in a host app; register it explicitly
-        // here so the ceremonies run against its real container bindings.
         return [CryptoServiceProvider::class, PasskeysServiceProvider::class];
     }
 
-    protected function defineEnvironment($app): void
+    /**
+     * The two passkeys migrations, named by provider class (never by filename).
+     *
+     * @return list<class-string<ServiceProvider>|string>
+     */
+    protected function migrationSources(): array
     {
-        $app['config']->set('database.default', 'testing');
-        $app['config']->set('database.connections.testing', [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
-            'prefix' => '',
-        ]);
-
-        $app['config']->set('app.url', 'https://example.com');
-        $app['config']->set('passkeys.rp.id', 'example.com');
-        $app['config']->set('passkeys.rp.name', 'Example');
-        $app['config']->set('passkeys.origins', ['https://example.com']);
+        return [PasskeysServiceProvider::class];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    protected function configBeforeBoot(): array
+    {
+        return [
+            'app.url' => 'https://example.com',
+            'passkeys.rp.id' => 'example.com',
+            'passkeys.rp.name' => 'Example',
+            'passkeys.origins' => ['https://example.com'],
+        ];
+    }
+
+    /**
+     * The host-owned `users` table the credentials hang off. It stands in for a table a host
+     * owns — including the opaque handle column `passkeys.user.handle_column` names — so it
+     * is built here rather than shipped.
+     *
+     * The explicit `dropIfExists` the previous base case registered is gone: PackageTestCase
+     * resets by dropping every table between tests, so nothing survives to clean up.
+     */
     protected function defineDatabaseMigrations(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-
-        $this->beforeApplicationDestroyed(function (): void {
-            Schema::dropIfExists('users');
-        });
+        parent::defineDatabaseMigrations();
 
         Schema::create('users', function (Blueprint $table): void {
             $table->id();
