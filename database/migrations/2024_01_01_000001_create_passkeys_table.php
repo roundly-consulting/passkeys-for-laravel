@@ -26,7 +26,7 @@ return new class extends Migration
             $table->char('credential_id_hash', 64)->unique();
             $table->text('public_key');
             $table->string('user_handle')->index();
-            $table->json('transports')->nullable();
+            $table->jsonb('transports')->nullable();
             $table->uuid('aaguid')->nullable();
             $table->unsignedBigInteger('sign_count')->default(0);
             $table->string('name')->nullable();
