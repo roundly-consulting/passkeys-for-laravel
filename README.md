@@ -1,8 +1,10 @@
+<!-- roundly-hero:start -->
 <p align="center">
-  <a href="https://roundly-consulting.com/open-source">
-    <img src="art/hero.png" alt="Passkeys For Laravel — Roundly open source" width="100%">
+  <a href="https://roundly-consulting.com/open-source/docs/passkeys-for-laravel?utm_source=github&utm_medium=readme&utm_campaign=open-source&utm_content=passkeys-for-laravel">
+    <img src="art/hero.png" alt="Passkeys for Laravel — Roundly open source" width="100%">
   </a>
 </p>
+<!-- roundly-hero:end -->
 
 # Passkeys for Laravel
 
