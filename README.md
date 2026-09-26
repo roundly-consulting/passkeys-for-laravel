@@ -106,12 +106,16 @@ factory — so registration hands your class back and its model events fire:
 
 ## Preparing your user model
 
-Implement the `HasPasskeys` contract via the `InteractsWithPasskeys` concern, and add a nullable
-column for the opaque, non-PII user handle (generated lazily on first registration):
+Implement the `HasPasskeys` contract via the `InteractsWithPasskeys` concern, and add a nullable,
+unique column for the opaque, non-PII user handle (generated lazily on first registration). The
+`passkeyUserHandle()` Blueprint macro creates it on any account table, named after
+`passkeys.user.handle_column`:
 
 ```php
 // database/migrations/xxxx_add_passkey_user_handle_to_users_table.php
-$table->string('passkey_user_handle')->nullable();
+Schema::table('users', function (Blueprint $table): void {
+    $table->passkeyUserHandle();   // string(passkeys.user.handle_column)->nullable()->unique()
+});
 ```
 
 ```php
@@ -186,6 +190,49 @@ $user = $passkey->authenticatable;
 The `ceremonyId` returned in the options travels back with the response so a stateless host can
 correlate the challenge; a session-based host can echo it or store the challenge in the session.
 
+Options minted **for a user** (`authenticationOptions($user)`) are bound to that user: the ceremony
+can only be completed with one of the credentials it offered in `allowCredentials`. Another
+account's passkey — or one enrolled after the options were issued — gets the same uniform
+`CredentialNotFound` as an unknown credential. Usernameless options stay open to any registered
+credential.
+
+### Second factor and owner expectations
+
+After a password, magic-link, or one-time-code login you know the account; ask for **its** passkey
+and hold the result to it with an `AuthenticationExpectation`:
+
+```php
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
+use RoundlyConsulting\Passkeys\Enums\UserVerification;
+
+// 1. Options for the known account, demanding user verification for this step only.
+$options = Passkeys::authenticationOptions($user, new AuthenticationOptionsOverrides(
+    userVerification: UserVerification::Required,
+    timeoutMs: 30_000,
+));
+
+// 2. Verify, and refuse any credential that is not this exact account's.
+$passkey = Passkeys::authenticate($response, AuthenticationExpectation::owner($user));
+```
+
+With several guards whose models all own passkeys, restrict a usernameless login to one owner type:
+
+```php
+$passkey = Passkeys::authenticate(
+    $response,
+    AuthenticationExpectation::ownerType((new Client)->getMorphClass()),
+);
+```
+
+The expectation is checked right after the credential is located — before the challenge is consumed
+and before its counter is touched — so a mismatch writes nothing and the right owner can still finish
+the same ceremony. A mismatch is the uniform `CredentialNotFound`. `owner()` refuses an unsaved model
+(`InvalidExpectation`) rather than silently widening to every account of that type.
+
+`AuthenticationOptionsOverrides` sets `userVerification` and `timeoutMs` for one ceremony; the
+requirement is stored with the challenge, so the verifier enforces exactly what the options promised.
+
 ### Per-call overrides
 
 Tune a single ceremony without changing the global defaults. Beyond user verification,
@@ -239,8 +286,14 @@ revoked credential is soft-deleted: it can no longer authenticate, and its crede
 cannot be re-registered.
 
 ```php
-Passkeys::rename($passkey, 'Work laptop');
-Passkeys::revoke($passkey);     // soft-deletes the credential
+Passkeys::rename($passkey, 'Work laptop');   // fires PasskeyRenamed
+Passkeys::revoke($passkey);                  // soft-deletes the credential, fires PasskeyRevoked
+```
+
+Query one owner's credentials from anywhere with the `ownedBy` scope:
+
+```php
+Passkey::query()->ownedBy($user)->latest('last_used_at')->get();
 ```
 
 ### Listing credentials safely
@@ -262,7 +315,10 @@ The `InteractsWithPasskeys` concern also exposes ceremony verbs so the user mode
 ```php
 $options = $user->passkeyRegistrationOptions();               // ::registrationOptions($user)
 $passkey = $user->registerPasskey($response, 'MacBook Touch ID');
-$options = $user->passkeyAuthenticationOptions();             // scoped to this user's credentials
+$options = $user->passkeyAuthenticationOptions($overrides);   // bound to this user's credentials
+
+$user->hasPasskeys();   // at least one active (non-revoked) passkey
+$user->passkeyCount();  // how many
 ```
 
 ## Attestation
@@ -380,6 +436,11 @@ Listen to drive audit trails and anomaly handling:
 - `RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated`
 - `RoundlyConsulting\Passkeys\Events\PasskeySignCountRegressed` — fired when a signature counter
   fails to advance under the `flag` policy.
+- `RoundlyConsulting\Passkeys\Events\PasskeyRevoked` — after `revoke()` (e.g. end sessions that
+  were established with it).
+- `RoundlyConsulting\Passkeys\Events\PasskeyRenamed` — after `rename()`, with `$previousName`.
+
+`Passkeys::fake()` fires `PasskeyRevoked` / `PasskeyRenamed` too, so listeners stay testable.
 
 ## Security model
 
@@ -389,6 +450,11 @@ Listen to drive audit trails and anomaly handling:
 - **User-bound registration challenges** — the challenge records the target user handle and the
   registration verifier rejects a response for a different user (defense-in-depth for
   admin-on-behalf flows).
+- **User-bound authentication challenges** (WebAuthn L3 §7.2 steps 5–6) — options minted for a user
+  record that user's handle and the exact credentials offered in `allowCredentials`; any other
+  credential is refused before signature verification and before any write.
+- **Owner expectations** — `AuthenticationExpectation` holds the asserted credential to an owner
+  type or an exact owner, checked before the challenge is consumed.
 - **Origin allow-list** and **RP ID hash** validation on every ceremony.
 - **Constant-time challenge comparison** (crypto's `ConstantTime::equals`).
 - **Signature verification** through `crypto-for-laravel` (ES256 with DER↔raw handling, RS256,
@@ -433,7 +499,37 @@ Passkeys::fake()->failRegistrationWith($exception);
 Assertions (`assertRegistered`, `assertRegisteredFor`, `assertNothingRegistered`,
 `assertAuthenticated`, `assertAuthenticatedFor`, `assertAuthenticationFailed`,
 `assertRegistrationCount`, `assertAuthenticationCount`) throw a package exception, so they work
-under any runner.
+under any runner. The fake honours `AuthenticationExpectation` and the authentication overrides the
+same way the real service does.
+
+### Real ceremonies with the virtual authenticator
+
+When you want the **real** verifier in your suite — challenge, origin, RP ID hash, flags,
+signature, sign counter — drive it with `Testing\VirtualAuthenticator`, a software ES256
+authenticator that attests with `none`:
+
+```php
+use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
+
+$authenticator = VirtualAuthenticator::es256();   // rpId from the options, origin from config
+
+$user->registerPasskey($authenticator->register($user->passkeyRegistrationOptions()));
+
+$passkey = Passkeys::authenticate($authenticator->assert($user->passkeyAuthenticationOptions()));
+
+// Prove your step-up really demands user verification:
+$authenticator->assert($options, userVerified: false);   // → UserVerificationRequired under `required`
+$authenticator->assert($options, signCount: 3);          // explicit counter, e.g. a cloned key
+$authenticator->credentialId();                          // base64url, as stored in credential_id
+```
+
+`register($options, residentKey: false)` models a non-discoverable credential (no `userHandle` on
+assertions). The authenticator answers any options it is given, so a suite can also play the
+attacker and prove the server refuses.
+
+**Test-only.** Its key is throwaway material from crypto-for-laravel's `TestKeys`; never use it in
+production code. It lives in runtime autoload only so other packages' suites can reach it — the same
+posture as `Passkeys::fake()`.
 
 Run the package's own suite with:
 

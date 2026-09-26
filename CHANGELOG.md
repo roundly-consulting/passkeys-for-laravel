@@ -48,3 +48,21 @@ Initial release.
     `attestation_clock_skew`, default 60 s, range 0–3600). An authenticator whose **batch
     certificate has lapsed** can no longer enrol under `self`/`basic`. This refuses real hardware,
     by design.
+- **Security: user-bound authentication ceremonies** (WebAuthn L3 §7.2 steps 5–6). Options minted
+  for a user now store that user's handle and the sha-256 digests of the credentials offered in
+  `allowCredentials`; the verifier refuses any other credential with `CredentialNotFound` before
+  signature verification and before the sign-count write. Previously, options for user A could be
+  completed with user B's passkey (the browser omits `userHandle` for non-discoverable credentials).
+  A flow that relied on that was a vulnerability. Usernameless ceremonies are unchanged; a challenge
+  stored before this change carries no allow-list and is still accepted for its ≤ 60 s lifetime.
+- `AuthenticationExpectation` (`ownerType()` / `owner()`) as an optional second argument of
+  `authenticate()`: holds the credential to an owner type or exact owner, checked before the
+  challenge is consumed and before any write. New `InvalidExpectation` for an unsaved owner.
+- `AuthenticationOptionsOverrides` (`userVerification`, `timeoutMs`) as an optional second argument
+  of `authenticationOptions()` and `passkeyAuthenticationOptions()`; the requirement travels with
+  the challenge.
+- `PasskeyRevoked` and `PasskeyRenamed` events, fired by `revoke()` / `rename()` (and the fake).
+- `$table->passkeyUserHandle()` Blueprint macro for the host-owned handle column.
+- `hasPasskeys()` / `passkeyCount()` on `InteractsWithPasskeys`; `Passkey::ownedBy($owner)` scope.
+- `Testing\VirtualAuthenticator` — a software ES256 authenticator for running real ceremonies in
+  test suites; `Testing\CborEncoder` behind it. Test-only.
