@@ -14,7 +14,7 @@ use RoundlyConsulting\Passkeys\Exceptions\OriginMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\SignatureInvalid;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Tests\Support\CborEncoder;
+use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 

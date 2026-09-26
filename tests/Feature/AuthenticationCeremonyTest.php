@@ -22,6 +22,7 @@ use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\SignatureInvalid;
 use RoundlyConsulting\Passkeys\Exceptions\SignCountRegression;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 
@@ -53,10 +54,11 @@ beforeEach(function (): void {
 
 it('authenticates a real ES256 assertion and advances the sign counter', function (): void {
     Event::fake([PasskeyAuthenticated::class]);
-    $vectors = WebAuthnVectors::es256();
-    registerVectors($this->user, $vectors);
+    $authenticator = VirtualAuthenticator::es256();
+    app(VerifyRegistrationAction::class)->execute($this->user, $authenticator->register(app(GenerateRegistrationOptionsAction::class)->execute($this->user)));
 
-    $passkey = authenticate($vectors, ['signCount' => 7]);
+    $options = app(GenerateAuthenticationOptionsAction::class)->execute();
+    $passkey = app(VerifyAuthenticationAction::class)->execute($authenticator->assert($options, signCount: 7));
 
     expect($passkey->sign_count)->toBe(7)
         ->and($passkey->last_used_at)->not->toBeNull();
@@ -84,12 +86,14 @@ it('authenticates a real RS256 assertion', function (): void {
 });
 
 it('resolves the owning user through the discoverable user handle', function (): void {
-    $vectors = WebAuthnVectors::es256();
-    $passkey = registerVectors($this->user, $vectors);
+    $authenticator = VirtualAuthenticator::es256();
+    $passkey = app(VerifyRegistrationAction::class)->execute($this->user, $authenticator->register(app(GenerateRegistrationOptionsAction::class)->execute($this->user)));
 
-    $resolved = authenticate($vectors, ['signCount' => 2, 'userHandle' => Base64UrlHandle($passkey)]);
+    $response = $authenticator->assert(app(GenerateAuthenticationOptionsAction::class)->execute());
+    $resolved = app(VerifyAuthenticationAction::class)->execute($response);
 
-    expect($resolved->authenticatable->is($this->user))->toBeTrue();
+    expect($response->userHandle)->toBe(Base64UrlHandle($passkey))
+        ->and($resolved->authenticatable->is($this->user))->toBeTrue();
 });
 
 it('rejects an unknown credential with a uniform not-found error', function (): void {
@@ -188,10 +192,11 @@ it('flags a sign-count regression and proceeds under the flag policy', function 
 });
 
 it('skips the sign-count comparison for static zero counters', function (): void {
-    $vectors = WebAuthnVectors::es256();
-    registerVectors($this->user, $vectors); // stored sign_count 0
+    $authenticator = VirtualAuthenticator::es256();
+    // stored sign_count 0
+    app(VerifyRegistrationAction::class)->execute($this->user, $authenticator->register(app(GenerateRegistrationOptionsAction::class)->execute($this->user)));
 
-    $passkey = authenticate($vectors, ['signCount' => 0]);
+    $passkey = app(VerifyAuthenticationAction::class)->execute($authenticator->assert(app(GenerateAuthenticationOptionsAction::class)->execute(), signCount: 0));
 
     expect($passkey->sign_count)->toBe(0)
         ->and($passkey->last_used_at)->not->toBeNull();

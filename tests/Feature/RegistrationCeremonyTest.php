@@ -23,6 +23,7 @@ use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\UnsupportedAlgorithm;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 
@@ -47,16 +48,29 @@ beforeEach(function (): void {
 
 it('registers a real ES256 credential end to end', function (): void {
     Event::fake([PasskeyRegistered::class]);
+    $authenticator = VirtualAuthenticator::es256();
 
-    $passkey = register($this->user, WebAuthnVectors::es256());
+    $options = app(GenerateRegistrationOptionsAction::class)->execute($this->user);
+    $passkey = app(VerifyRegistrationAction::class)->execute($this->user, $authenticator->register($options));
 
     expect($passkey->exists)->toBeTrue()
         ->and($passkey->authenticatable->is($this->user))->toBeTrue()
+        ->and($passkey->credential_id)->toBe($authenticator->credentialId())
         ->and($passkey->attestation_format)->toBe('none')
-        ->and($passkey->transports)->toBe(['internal', 'hybrid'])
-        ->and($passkey->aaguid)->not->toBeNull();
+        ->and($passkey->transports)->toBe(['internal'])
+        // The virtual authenticator discloses no AAGUID, which is stored as null.
+        ->and($passkey->aaguid)->toBeNull();
 
     Event::assertDispatched(PasskeyRegistered::class);
+});
+
+it('stores the registering account\'s handle on the credential', function (): void {
+    $authenticator = VirtualAuthenticator::es256();
+
+    $options = app(GenerateRegistrationOptionsAction::class)->execute($this->user);
+    $passkey = app(VerifyRegistrationAction::class)->execute($this->user, $authenticator->register($options, residentKey: false));
+
+    expect($passkey->user_handle)->toBe($this->user->passkeyUserHandle());
 });
 
 it('registers a real RS256 credential end to end', function (): void {

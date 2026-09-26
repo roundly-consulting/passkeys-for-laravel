@@ -11,6 +11,7 @@ use RoundlyConsulting\Crypto\Testing\TestCertificateChain;
 use RoundlyConsulting\Crypto\Testing\TestCertificates;
 use RoundlyConsulting\Crypto\Testing\TestLeafOptions;
 use RoundlyConsulting\Crypto\X509\Certificate;
+use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RuntimeException;
 
 /**

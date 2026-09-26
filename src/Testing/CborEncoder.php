@@ -2,13 +2,15 @@
 
 declare(strict_types=1);
 
-namespace RoundlyConsulting\Passkeys\Tests\Support;
+namespace RoundlyConsulting\Passkeys\Testing;
 
 /**
- * A tiny, TEST-ONLY CBOR encoder used to synthesize deterministic attestation
- * objects and COSE keys for the test vectors. It intentionally lives outside
- * src/ — production code never encodes CBOR, and this is not a runtime
- * dependency. Supports only the subset the fixtures need.
+ * A tiny, TEST-ONLY CBOR encoder behind {@see VirtualAuthenticator} and the package's
+ * own test vectors: it builds the attestation objects and COSE keys an authenticator
+ * would send. The relying party itself never encodes CBOR (it only decodes, through
+ * crypto-for-laravel), so nothing in production calls this. It lives in runtime
+ * autoload only so consuming packages' suites can reach it — the same posture as
+ * {@see FakePasskeys}. Supports only the subset the fixtures need.
  */
 final class CborEncoder
 {

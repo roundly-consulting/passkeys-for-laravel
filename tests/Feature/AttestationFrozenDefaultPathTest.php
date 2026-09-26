@@ -6,7 +6,7 @@ use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyRegistrationAction;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Tests\Support\CborEncoder;
+use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 

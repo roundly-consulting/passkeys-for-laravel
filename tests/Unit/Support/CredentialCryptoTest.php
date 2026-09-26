@@ -17,7 +17,7 @@ use RoundlyConsulting\Passkeys\Exceptions\SignatureInvalid;
 use RoundlyConsulting\Passkeys\Exceptions\UnsupportedAlgorithm;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
-use RoundlyConsulting\Passkeys\Tests\Support\CborEncoder;
+use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RoundlyConsulting\Passkeys\Tests\Support\TestKeys;
 
 /*

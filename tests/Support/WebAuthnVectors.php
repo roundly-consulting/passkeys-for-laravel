@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Passkeys\Tests\Support;
 
 use OpenSSLAsymmetricKey;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RuntimeException;
 
 /**

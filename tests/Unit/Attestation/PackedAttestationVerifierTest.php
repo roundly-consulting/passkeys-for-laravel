@@ -14,7 +14,7 @@ use RoundlyConsulting\Passkeys\Enums\AttestationType;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidAttestation;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidAuthenticatorData;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
-use RoundlyConsulting\Passkeys\Tests\Support\CborEncoder;
+use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RoundlyConsulting\Passkeys\Tests\Support\PackedVectors;
 use RoundlyConsulting\Passkeys\Tests\Support\RawCertificate;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
