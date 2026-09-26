@@ -50,12 +50,14 @@ interface PasskeyService
     public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey;
 
     /**
-     * Rename a stored credential (cosmetic only — never a verification input).
+     * Rename a stored credential (cosmetic only — never a verification input) and
+     * fire PasskeyRenamed.
      */
     public function rename(Passkey $passkey, string $name): Passkey;
 
     /**
-     * Revoke (soft-delete) a stored credential so it can no longer authenticate.
+     * Revoke (soft-delete) a stored credential so it can no longer authenticate,
+     * and fire PasskeyRevoked.
      */
     public function revoke(Passkey $passkey): void;
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Testing;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
@@ -17,6 +18,8 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
+use RoundlyConsulting\Passkeys\Events\PasskeyRenamed;
+use RoundlyConsulting\Passkeys\Events\PasskeyRevoked;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
@@ -180,16 +183,29 @@ final class FakePasskeys implements PasskeyService
         return $passkey;
     }
 
+    /**
+     * Fires PasskeyRenamed like the real service, so host listeners stay testable
+     * under the fake.
+     */
     public function rename(Passkey $passkey, string $name): Passkey
     {
+        $previousName = $passkey->name;
+
         $passkey->forceFill(['name' => $name])->save();
+
+        app(Dispatcher::class)->dispatch(new PasskeyRenamed($passkey, $previousName));
 
         return $passkey;
     }
 
+    /**
+     * Fires PasskeyRevoked like the real service.
+     */
     public function revoke(Passkey $passkey): void
     {
         $passkey->delete();
+
+        app(Dispatcher::class)->dispatch(new PasskeyRevoked($passkey));
     }
 
     public function assertRegistered(): void

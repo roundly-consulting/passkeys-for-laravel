@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use RoundlyConsulting\Passkeys\Actions\GenerateAuthenticationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyAuthenticationAction;
@@ -17,6 +18,8 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
+use RoundlyConsulting\Passkeys\Events\PasskeyRenamed;
+use RoundlyConsulting\Passkeys\Events\PasskeyRevoked;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 
 /**
@@ -30,6 +33,7 @@ final class PasskeyManager implements PasskeyService
         private readonly VerifyRegistrationAction $verifyRegistration,
         private readonly GenerateAuthenticationOptionsAction $authenticationOptions,
         private readonly VerifyAuthenticationAction $verifyAuthentication,
+        private readonly Dispatcher $events,
     ) {}
 
     public function registrationOptions(HasPasskeys $user, ?RegistrationOptionsOverrides $overrides = null): CreationOptionsData
@@ -54,7 +58,11 @@ final class PasskeyManager implements PasskeyService
 
     public function rename(Passkey $passkey, string $name): Passkey
     {
+        $previousName = $passkey->name;
+
         $passkey->forceFill(['name' => $name])->save();
+
+        $this->events->dispatch(new PasskeyRenamed($passkey, $previousName));
 
         return $passkey;
     }
@@ -62,5 +70,7 @@ final class PasskeyManager implements PasskeyService
     public function revoke(Passkey $passkey): void
     {
         $passkey->delete();
+
+        $this->events->dispatch(new PasskeyRevoked($passkey));
     }
 }

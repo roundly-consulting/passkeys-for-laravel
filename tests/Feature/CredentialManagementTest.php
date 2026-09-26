@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\Events\PasskeyRenamed;
+use RoundlyConsulting\Passkeys\Events\PasskeyRevoked;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialAlreadyRegistered;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
@@ -68,4 +71,46 @@ it('still blocks re-registering a revoked credential id', function (): void {
 
     expect(fn () => registerNamed($this->user, $vectors, null))
         ->toThrow(CredentialAlreadyRegistered::class);
+});
+
+it('fires PasskeyRenamed with the previous name', function (): void {
+    Event::fake([PasskeyRenamed::class]);
+    $passkey = registerNamed($this->user, WebAuthnVectors::es256(), 'Old');
+
+    Passkeys::rename($passkey, 'New');
+
+    Event::assertDispatched(PasskeyRenamed::class, fn (PasskeyRenamed $event): bool => $event->passkey->is($passkey)
+        && $event->previousName === 'Old'
+        && $event->passkey->name === 'New');
+});
+
+it('fires PasskeyRenamed with a null previous name for an unnamed credential', function (): void {
+    Event::fake([PasskeyRenamed::class]);
+    $passkey = registerNamed($this->user, WebAuthnVectors::es256(), null);
+
+    Passkeys::rename($passkey, 'First name');
+
+    Event::assertDispatched(PasskeyRenamed::class, fn (PasskeyRenamed $event): bool => $event->previousName === null);
+});
+
+it('fires PasskeyRevoked after the credential is soft-deleted', function (): void {
+    Event::fake([PasskeyRevoked::class]);
+    $passkey = registerNamed($this->user, WebAuthnVectors::es256(), 'Lost');
+
+    Passkeys::revoke($passkey);
+
+    Event::assertDispatched(PasskeyRevoked::class, fn (PasskeyRevoked $event): bool => $event->passkey->is($passkey)
+        && $event->passkey->trashed());
+});
+
+it('fires the same lifecycle events under the fake', function (): void {
+    Event::fake([PasskeyRenamed::class, PasskeyRevoked::class]);
+    $passkey = Passkey::factory()->create(['name' => 'Before']);
+
+    $fake = Passkeys::fake();
+    Passkeys::rename($passkey, 'After');
+    $fake->revoke($passkey);
+
+    Event::assertDispatched(PasskeyRenamed::class, fn (PasskeyRenamed $event): bool => $event->previousName === 'Before');
+    Event::assertDispatched(PasskeyRevoked::class, fn (PasskeyRevoked $event): bool => $event->passkey->trashed());
 });
