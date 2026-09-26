@@ -1,19 +1,9 @@
 version: 2
-# composer resolves the private roundly-consulting/* VCS deps. Dependabot's own
-# app token can't reach every one of them (testing-for-laravel isn't on the org's
-# Dependabot access list), so the composer job authenticates git over github.com
-# with the repo's Dependabot secret instead.
-registries:
-  roundly-github:
-    type: git
-    url: https://github.com
-    username: x-access-token
-    password: ${{secrets.COMPOSER_AUTH_TOKEN}}
+# composer resolves the private roundly-consulting/* VCS deps; Dependabot has
+# org access granted to those repos so the composer job can build the graph.
 updates:
   - package-ecosystem: "composer"
     directory: "/"
-    registries:
-      - roundly-github
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
