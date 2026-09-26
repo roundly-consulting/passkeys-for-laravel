@@ -23,6 +23,7 @@ it('serialises challenge data to an array and back', function (): void {
         'algorithms' => [-7],
         'type' => 'registration',
         'user_handle' => 'handle',
+        'allowed_credential_hashes' => [],
     ]);
 });
 

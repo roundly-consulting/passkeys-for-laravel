@@ -11,6 +11,7 @@ use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Enums\CeremonyType;
@@ -85,6 +86,10 @@ final class VerifyAuthenticationAction
             throw ChallengeMismatch::make();
         }
 
+        // §7.2.5-6 — a ceremony minted for a known user only accepts that user's
+        // credentials, and only those it offered in allowCredentials.
+        $this->assertBoundToCeremony($passkey, $challenge);
+
         $this->assertOrigin($clientData, $origins);
 
         // §7.2.14-17 — verify rpIdHash + flags.
@@ -124,6 +129,24 @@ final class VerifyAuthenticationAction
         }
 
         return $passkey;
+    }
+
+    /**
+     * The browser omits `userHandle` for a non-discoverable credential, so the
+     * response alone cannot prove whose passkey signed. The challenge can: it
+     * remembers who the options were minted for. Misses stay the uniform
+     * not-found error, so the check leaks nothing about other accounts.
+     */
+    private function assertBoundToCeremony(Passkey $passkey, ChallengeData $challenge): void
+    {
+        if ($challenge->userHandle !== null && ! ConstantTime::equals($challenge->userHandle, $passkey->user_handle)) {
+            throw CredentialNotFound::make();
+        }
+
+        if ($challenge->allowedCredentialHashes !== []
+            && ! in_array($passkey->credential_id_hash, $challenge->allowedCredentialHashes, true)) {
+            throw CredentialNotFound::make();
+        }
     }
 
     /**
