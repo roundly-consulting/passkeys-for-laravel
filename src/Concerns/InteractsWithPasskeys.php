@@ -43,6 +43,23 @@ trait InteractsWithPasskeys
     }
 
     /**
+     * Whether this account has at least one active (non-revoked) passkey — e.g. to
+     * offer a passkey second factor only to accounts that can complete it.
+     */
+    public function hasPasskeys(): bool
+    {
+        return $this->passkeys()->exists();
+    }
+
+    /**
+     * How many active (non-revoked) passkeys this account holds.
+     */
+    public function passkeyCount(): int
+    {
+        return $this->passkeys()->count();
+    }
+
+    /**
      * Build creation options for this user's registration ceremony.
      */
     public function passkeyRegistrationOptions(?RegistrationOptionsOverrides $overrides = null): CreationOptionsData

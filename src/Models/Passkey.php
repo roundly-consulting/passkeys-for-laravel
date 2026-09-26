@@ -110,6 +110,20 @@ class Passkey extends Model
         return $query->where('user_handle', $userHandle);
     }
 
+    /**
+     * Credentials of exactly this owner — its morph type and key — e.g. to list one
+     * account's passkeys from a context that only holds the owner model.
+     *
+     * @param  Builder<Passkey>  $query
+     * @return Builder<Passkey>
+     */
+    public function scopeOwnedBy(Builder $query, Model $owner): Builder
+    {
+        return $query
+            ->where('authenticatable_type', $owner->getMorphClass())
+            ->where('authenticatable_id', $owner->getKey());
+    }
+
     public function touchUsage(int $signCount): void
     {
         $this->forceFill([

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Carbon;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Tests\Support\Client;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 
 it('persists a passkey through the factory', function (): void {
@@ -99,4 +100,21 @@ it('the never-used state clears usage fields', function (): void {
 it('provides es256 and rs256 factory states', function (): void {
     expect(Passkey::factory()->es256()->make()->attestation_format)->toBe('none')
         ->and(Passkey::factory()->rs256()->make()->attestation_format)->toBe('none');
+});
+
+it('scopes a query to exactly one owner by morph type and key', function (): void {
+    $user = User::query()->create(['name' => 'Edsger', 'email' => 'e@example.com']);
+    $other = User::query()->create(['name' => 'Tony', 'email' => 't@example.com']);
+    $client = Client::query()->create(['name' => 'Acme']);
+
+    $mine = Passkey::factory()->forAuthenticatable($user)->create();
+    Passkey::factory()->forAuthenticatable($other)->create();
+    Passkey::factory()->forAuthenticatable($client)->create(); // same key as $user, other type
+
+    $owned = Passkey::query()->ownedBy($user)->get();
+
+    expect($client->getKey())->toBe($user->getKey())
+        ->and($owned)->toHaveCount(1)
+        ->and($owned->first()?->is($mine))->toBeTrue()
+        ->and(Passkey::query()->ownedBy($client)->count())->toBe(1);
 });

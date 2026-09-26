@@ -8,6 +8,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Tests\Support\Client;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 
 beforeEach(function (): void {
@@ -84,4 +85,32 @@ it('registers a passkey through the user verb, delegating to the service', funct
         ->and($passkey->authenticatable->is($this->user))->toBeTrue();
 
     $fake->assertRegisteredFor($this->user);
+});
+
+it('reports whether the account has passkeys and how many', function (): void {
+    expect($this->user->hasPasskeys())->toBeFalse()
+        ->and($this->user->passkeyCount())->toBe(0);
+
+    Passkey::factory()->forAuthenticatable($this->user)->count(2)->create();
+
+    expect($this->user->hasPasskeys())->toBeTrue()
+        ->and($this->user->passkeyCount())->toBe(2);
+});
+
+it('ignores revoked passkeys in the presence check and count', function (): void {
+    $passkey = Passkey::factory()->forAuthenticatable($this->user)->create();
+
+    Passkeys::revoke($passkey);
+
+    expect($this->user->hasPasskeys())->toBeFalse()
+        ->and($this->user->passkeyCount())->toBe(0);
+});
+
+it('does not count another owner type sharing the same key', function (): void {
+    $client = Client::query()->create(['name' => 'Acme']);
+    Passkey::factory()->forAuthenticatable($client)->create();
+
+    expect($client->getKey())->toBe($this->user->getKey())
+        ->and($this->user->hasPasskeys())->toBeFalse()
+        ->and($client->passkeyCount())->toBe(1);
 });
