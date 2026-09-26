@@ -79,7 +79,7 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `user_verification` | — | `required` | UV requirement (`required`/`preferred`/`discouraged`). |
 | `resident_key` | `PASSKEYS_RESIDENT_KEY` | `required` | Discoverable-credential posture (`required`/`preferred`/`discouraged`); `required` keeps usernameless login. |
 | `challenge.store` | `PASSKEYS_CHALLENGE_STORE` | default cache store | Cache store name for challenges. |
-| `challenge.ttl` | `PASSKEYS_CHALLENGE_TTL` | `60` | Challenge lifetime in seconds. |
+| `challenge.ttl` | `PASSKEYS_CHALLENGE_TTL` | `60` | Minimum challenge lifetime in seconds; a challenge always lives at least as long as its ceremony's timeout (config or per-call). |
 | `challenge.bytes` | — | `32` | Random challenge length in bytes. |
 | `sign_count_policy` | — | `flag` | Counter-regression handling: `reject` throws, `flag` fires an event and proceeds. |
 | `attestation_trust` | `PASSKEYS_ATTESTATION_TRUST` | `ignore` | Trust policy for the attestation statement: `ignore` / `self` / `basic` (see **Attestation**). |
@@ -233,7 +233,8 @@ the same ceremony. A mismatch is the uniform `CredentialNotFound`. `owner()` ref
 (`InvalidExpectation`) rather than silently widening to every account of that type.
 
 `AuthenticationOptionsOverrides` sets `userVerification` and `timeoutMs` for one ceremony; the
-requirement is stored with the challenge, so the verifier enforces exactly what the options promised.
+requirement is stored with the challenge, so the verifier enforces exactly what the options promised,
+and the challenge lives at least as long as the timeout the browser was given.
 
 ### Per-call overrides
 

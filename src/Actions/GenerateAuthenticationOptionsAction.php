@@ -41,6 +41,7 @@ final class GenerateAuthenticationOptionsAction
         $this->config->requireOrigins();
 
         $userVerification = $overrides->userVerification ?? $this->config->userVerification;
+        $timeout = $overrides->timeoutMs ?? $this->config->timeoutMs;
         $passkeys = $user === null ? [] : array_values($user->passkeys()->get()->all());
 
         $ceremonyId = Str::random(40);
@@ -59,14 +60,14 @@ final class GenerateAuthenticationOptionsAction
                     $passkeys,
                 ),
             ),
-            $this->config->challengeTtl,
+            $this->config->challengeTtlFor($timeout),
         );
 
         return new RequestOptionsData(
             ceremonyId: $ceremonyId,
             rpId: $rpId,
             challenge: $challenge,
-            timeoutMs: $overrides->timeoutMs ?? $this->config->timeoutMs,
+            timeoutMs: $timeout,
             userVerification: $userVerification,
             allowCredentials: array_map(
                 static fn (Passkey $passkey): CredentialDescriptor => new CredentialDescriptor(

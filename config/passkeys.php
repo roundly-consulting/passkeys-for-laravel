@@ -79,8 +79,10 @@ return [
     | Challenge storage
     |--------------------------------------------------------------------------
     |
-    | Challenges are single-use and TTL-bound in the cache. The TTL should match
-    | the ceremony timeout. `store` is a cache store name (null = default store).
+    | Challenges are single-use and TTL-bound in the cache. `ttl` is the floor:
+    | a challenge always lives at least as long as the timeout its options hand
+    | the browser (config or per-call), rounded up to whole seconds. `store` is
+    | a cache store name (null = default store).
     |
     */
     'challenge' => [

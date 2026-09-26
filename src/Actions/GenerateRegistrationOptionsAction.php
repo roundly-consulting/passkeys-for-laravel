@@ -53,7 +53,7 @@ final class GenerateRegistrationOptionsAction
                 type: CeremonyType::Registration,
                 userHandle: $user->passkeyUserHandle(),
             ),
-            $this->config->challengeTtl,
+            $this->config->challengeTtlFor($timeout),
         );
 
         return new CreationOptionsData(

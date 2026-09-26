@@ -145,6 +145,17 @@ final readonly class PasskeyConfig
     }
 
     /**
+     * How long to keep a ceremony's challenge: `challenge.ttl`, but never less than the
+     * timeout the options hand the browser (rounded up to whole seconds). A ceremony the
+     * user finishes inside the promised window must not be refused as expired, whether
+     * the longer timeout comes from config or from a per-call override.
+     */
+    public function challengeTtlFor(int $timeoutMs): int
+    {
+        return max($this->challengeTtl, (int) ceil($timeoutMs / 1000));
+    }
+
+    /**
      * @throws InvalidConfiguration
      */
     public function requireRpId(): string
