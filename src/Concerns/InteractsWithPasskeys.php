@@ -10,6 +10,7 @@ use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Random\Bytes;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
@@ -56,11 +57,12 @@ trait InteractsWithPasskeys
     }
 
     /**
-     * Build request options scoped to this user's stored credentials.
+     * Build request options scoped to this user's stored credentials. The ceremony
+     * is bound to this user: only one of the offered credentials can complete it.
      */
-    public function passkeyAuthenticationOptions(): RequestOptionsData
+    public function passkeyAuthenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
-        return $this->passkeyService()->authenticationOptions($this);
+        return $this->passkeyService()->authenticationOptions($this, $overrides);
     }
 
     /**

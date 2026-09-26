@@ -48,9 +48,9 @@ abstract class TestCase extends PackageTestCase
     }
 
     /**
-     * The host-owned `users` table the credentials hang off. It stands in for a table a host
-     * owns — including the opaque handle column `passkeys.user.handle_column` names — so it
-     * is built here rather than shipped.
+     * The host-owned `users` and `clients` tables the credentials hang off. They stand in
+     * for tables a host owns — including the opaque handle column
+     * `passkeys.user.handle_column` names — so they are built here rather than shipped.
      *
      * The explicit `dropIfExists` the previous base case registered is gone: PackageTestCase
      * resets by dropping every table between tests, so nothing survives to clean up.
@@ -60,6 +60,16 @@ abstract class TestCase extends PackageTestCase
         parent::defineDatabaseMigrations();
 
         Schema::create('users', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
+            $table->string('passkey_user_handle')->nullable();
+            $table->timestamps();
+        });
+
+        // A second guard's account table, so ownership checks can prove the owner TYPE
+        // matters when two owners share a key.
+        Schema::create('clients', function (Blueprint $table): void {
             $table->id();
             $table->string('name')->nullable();
             $table->string('email')->nullable();

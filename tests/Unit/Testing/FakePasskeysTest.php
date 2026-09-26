@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
+use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Models\Passkey;
@@ -137,4 +140,30 @@ it('does not match a registration for a different user', function (): void {
     $this->fake->register($this->user, fakeRegistrationResponse());
 
     expect(fn () => $this->fake->assertRegisteredFor($other))->toThrow(PasskeyAssertionFailed::class);
+});
+
+it('honours authentication overrides in the canned options', function (): void {
+    $options = $this->fake->authenticationOptions($this->user, new AuthenticationOptionsOverrides(userVerification: UserVerification::Preferred, timeoutMs: 5_000));
+
+    expect($options->userVerification)->toBe(UserVerification::Preferred)
+        ->and($options->timeoutMs)->toBe(5_000);
+});
+
+it('refuses a credential that misses the owner expectation, recording a failure', function (): void {
+    $this->fake->register($this->user, fakeRegistrationResponse());
+
+    expect(fn (): Passkey => $this->fake->authenticate(fakeAssertionResponse(), AuthenticationExpectation::ownerType('client')))
+        ->toThrow(CredentialNotFound::class);
+
+    $this->fake->assertAuthenticationFailed();
+    $this->fake->assertAuthenticationCount(1);
+});
+
+it('authenticates a credential that meets the owner expectation', function (): void {
+    $this->fake->register($this->user, fakeRegistrationResponse());
+
+    $passkey = $this->fake->authenticate(fakeAssertionResponse(), AuthenticationExpectation::owner($this->user));
+
+    expect($passkey->authenticatable->is($this->user))->toBeTrue();
+    $this->fake->assertAuthenticatedFor($this->user);
 });

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
@@ -146,26 +148,32 @@ final class FakePasskeys implements PasskeyService
         return $passkey;
     }
 
-    public function authenticationOptions(?HasPasskeys $user = null): RequestOptionsData
+    public function authenticationOptions(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
         return new RequestOptionsData(
             ceremonyId: self::CANNED_CEREMONY_ID,
             rpId: 'localhost',
             challenge: self::CANNED_CHALLENGE,
-            timeoutMs: 60_000,
-            userVerification: UserVerification::Required,
+            timeoutMs: $overrides->timeoutMs ?? 60_000,
+            userVerification: $overrides->userVerification ?? UserVerification::Required,
         );
     }
 
-    public function authenticate(AuthenticationResponseData $response): Passkey
+    /**
+     * An expectation is honoured exactly as the real verifier does: a credential of
+     * the wrong owner is a recorded failure with the uniform not-found error.
+     */
+    public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey
     {
-        if (! $this->acceptsAuthentication) {
+        $passkey = $this->acceptsAuthentication
+            ? $this->authenticatesAs ?? $this->lastRegisteredPasskey()
+            : null;
+
+        if ($passkey === null || ($expect !== null && ! $expect->matches($passkey))) {
             $this->authentications[] = ['passkey' => null, 'success' => false];
 
             throw CredentialNotFound::make();
         }
-
-        $passkey = $this->authenticatesAs ?? $this->lastRegisteredPasskey();
 
         $this->authentications[] = ['passkey' => $passkey, 'success' => true];
 

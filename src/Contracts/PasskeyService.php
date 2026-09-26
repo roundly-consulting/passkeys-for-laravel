@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Contracts;
 
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
@@ -33,16 +35,19 @@ interface PasskeyService
     public function register(HasPasskeys $user, RegistrationResponseData $response, ?string $name = null): Passkey;
 
     /**
-     * Build the request options for an authentication ceremony.
+     * Build the request options for an authentication ceremony. With a user, the
+     * ceremony is bound to that user and the credentials it offers; without one it
+     * is discoverable (usernameless).
      */
-    public function authenticationOptions(?HasPasskeys $user = null): RequestOptionsData;
+    public function authenticationOptions(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData;
 
     /**
-     * Verify an authentication response and return the resolved credential.
+     * Verify an authentication response and return the resolved credential,
+     * optionally holding it to an expected owner type or owner.
      *
      * @throws PasskeyException
      */
-    public function authenticate(AuthenticationResponseData $response): Passkey;
+    public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey;
 
     /**
      * Rename a stored credential (cosmetic only — never a verification input).

@@ -10,6 +10,7 @@ use RoundlyConsulting\Crypto\Codec\InvalidEncodingException;
 use RoundlyConsulting\Crypto\Random\Bytes;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CredentialDescriptor;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
@@ -34,12 +35,12 @@ final class GenerateAuthenticationOptionsAction
         private readonly PasskeyConfig $config,
     ) {}
 
-    public function execute(?HasPasskeys $user = null): RequestOptionsData
+    public function execute(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
         $rpId = $this->config->requireRpId();
         $this->config->requireOrigins();
 
-        $userVerification = $this->config->userVerification;
+        $userVerification = $overrides->userVerification ?? $this->config->userVerification;
         $passkeys = $user === null ? [] : array_values($user->passkeys()->get()->all());
 
         $ceremonyId = Str::random(40);
@@ -65,7 +66,7 @@ final class GenerateAuthenticationOptionsAction
             ceremonyId: $ceremonyId,
             rpId: $rpId,
             challenge: $challenge,
-            timeoutMs: $this->config->timeoutMs,
+            timeoutMs: $overrides->timeoutMs ?? $this->config->timeoutMs,
             userVerification: $userVerification,
             allowCredentials: array_map(
                 static fn (Passkey $passkey): CredentialDescriptor => new CredentialDescriptor(

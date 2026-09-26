@@ -20,6 +20,7 @@ return [
     'unsupported_algorithm' => 'The credential algorithm is not supported.',
     'credential_already_registered' => 'This credential is already registered.',
     'credential_not_found' => 'No matching passkey could be found.',
+    'expectation_unsaved_owner' => 'A passkey owner expectation needs a persisted owner.',
     'malformed_cbor' => 'The CBOR data is malformed.',
     'invalid_cose_key' => 'The COSE public key is invalid.',
     'user_verification_required' => 'User verification was required but not performed.',

@@ -10,6 +10,8 @@ use RoundlyConsulting\Passkeys\Actions\VerifyAuthenticationAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyRegistrationAction;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
@@ -40,14 +42,14 @@ final class PasskeyManager implements PasskeyService
         return $this->verifyRegistration->execute($user, $response, $name);
     }
 
-    public function authenticationOptions(?HasPasskeys $user = null): RequestOptionsData
+    public function authenticationOptions(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
-        return $this->authenticationOptions->execute($user);
+        return $this->authenticationOptions->execute($user, $overrides);
     }
 
-    public function authenticate(AuthenticationResponseData $response): Passkey
+    public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey
     {
-        return $this->verifyAuthentication->execute($response);
+        return $this->verifyAuthentication->execute($response, $expect);
     }
 
     public function rename(Passkey $passkey, string $name): Passkey

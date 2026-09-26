@@ -10,6 +10,7 @@ use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ClientData;
@@ -60,13 +61,20 @@ final class VerifyAuthenticationAction
     /**
      * @throws PasskeyException
      */
-    public function execute(AuthenticationResponseData $response): Passkey
+    public function execute(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey
     {
         $rpId = $this->config->requireRpId();
         $origins = $this->config->requireOrigins();
 
         // §7.2.1-6 — locate the credential (uniform miss, no user enumeration).
         $passkey = $this->locateCredential($response);
+
+        // The caller's owner expectation is checked before the challenge is pulled,
+        // so a credential of the wrong owner neither burns the ceremony nor gets its
+        // counter touched — the right owner can still finish.
+        if ($expect !== null && ! $expect->matches($passkey)) {
+            throw CredentialNotFound::make();
+        }
 
         // §7.2.11-13 — decode + type-check + challenge + origin.
         $clientData = ClientData::fromJson($response->clientDataJson);
