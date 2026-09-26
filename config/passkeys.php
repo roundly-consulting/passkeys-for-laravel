@@ -113,6 +113,11 @@ return [
     | Turning real attestation on is two lines: PASSKEYS_ATTESTATION=direct and
     | PASSKEYS_ATTESTATION_TRUST=basic.
     |
+    | Synced passkeys (iCloud Keychain, Google Password Manager, most password
+    | managers) answer with `fmt: none` whatever you request, so 'self' and
+    | 'basic' refuse them (AttestationRequired) — including every passkey an
+    | unmanaged iPhone, iPad or Mac creates. Keep 'ignore' for consumer sign-in.
+    |
     */
     'attestation_trust' => env('PASSKEYS_ATTESTATION_TRUST', AttestationTrust::Ignore->value),
 
@@ -131,13 +136,17 @@ return [
     | usually omits the root).
     |
     | 'defaults' trusts the roots shipped in this package's resources/roots —
-    | Apple's published WebAuthn Root CA (so Apple devices verify with no further
-    | setup) and Google's published hardware-attestation roots. Set it to false to
-    | trust ONLY the paths below.
+    | Apple's published WebAuthn Root CA (anchors the `apple` format, which only
+    | older device-bound Touch ID / Face ID credentials send; synced iCloud
+    | Keychain passkeys send `none` and are refused under 'self'/'basic') and
+    | Google's published hardware-attestation roots (for `android-key`, not yet
+    | verified). Set it to false to trust ONLY the paths below.
     |
     | 'paths' maps a format to absolute PEM (or PEM-bundle) paths on the host's
     | filesystem. Security keys attest under their vendor's own root, so 'packed'
-    | ships no default: supply your vendor's PEM.
+    | ships no default: supply your vendor's PEM. MDM-managed Apple devices with
+    | Apple's Passkey Attestation configuration attest as 'packed' under your
+    | organisation's own CA — add that CA here.
     |
     */
     'attestation_anchors' => [

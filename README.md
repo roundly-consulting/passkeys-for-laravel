@@ -84,7 +84,7 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `sign_count_policy` | — | `flag` | Counter-regression handling: `reject` throws, `flag` fires an event and proceeds. |
 | `attestation_trust` | `PASSKEYS_ATTESTATION_TRUST` | `ignore` | Trust policy for the attestation statement: `ignore` / `self` / `basic` (see **Attestation**). |
 | `reject_unknown_fmt` | `PASSKEYS_REJECT_UNKNOWN_FMT` | `false` | Under `ignore`, refuse a format we cannot verify — and a known format whose statement does not verify. |
-| `attestation_anchors.defaults` | `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS` | `true` | Trust the roots shipped in `resources/roots/` (Apple WebAuthn Root CA, Google hardware-attestation roots). |
+| `attestation_anchors.defaults` | `PASSKEYS_ATTESTATION_DEFAULT_ANCHORS` | `true` | Trust the roots shipped in `resources/roots/` (Apple WebAuthn Root CA for the `apple` format, Google hardware-attestation roots for the not-yet-verified `android-key` format). |
 | `attestation_anchors.paths` | — | `[]` | `format => [absolute PEM paths]` — your own trust anchors. |
 | `attestation_clock_skew` | `PASSKEYS_ATTESTATION_CLOCK_SKEW` | `60` | Leeway (seconds, 0–3600) on both bounds of an attestation certificate's validity window. |
 | `aaguids.allowed` | `PASSKEYS_AAGUIDS_ALLOWED` | `[]` | Comma-separated AAGUID allow-list; empty allows every authenticator model. |
@@ -334,8 +334,17 @@ PASSKEYS_ATTESTATION=direct        # ask authenticators to attest
 PASSKEYS_ATTESTATION_TRUST=basic   # and refuse anything unproven
 ```
 
-Ceremony call sites do not change at all — attestation hardening is configuration, not code. What
-changes is what you can see afterwards:
+Ceremony call sites do not change at all — attestation hardening is configuration, not code.
+
+> ⚠️ **Synced passkeys never attest.** iCloud Keychain, Google Password Manager and most password
+> managers answer even a `direct` request with `fmt: none` (Apple's also carry an all-zero AAGUID),
+> because a key that moves between devices has no single device to vouch for. Under `self` or
+> `basic` every such passkey is refused with `AttestationRequired` — in practice that is **every
+> passkey an unmanaged iPhone, iPad or Mac creates today**. The strict tiers are for fleets of
+> device-bound authenticators (security keys, managed devices); keep `ignore` (the default) for
+> consumer sign-in.
+
+What changes is what you can see afterwards:
 
 ```php
 $passkey->attestation_format;   // 'packed' | 'apple' | 'none'
@@ -347,16 +356,16 @@ $passkey->attestation_type;     // 'basic' | 'anonca' | 'self' | 'none' — the 
 | `attestation_trust` | What it accepts |
 |---|---|
 | `ignore` (default) | Everything. The format is recorded; **no statement is ever read**. |
-| `self` | The statement's **maths must hold** — signature, chain linkage, certificate validity dates. Anchoring is waived, so self-attestation and an un-anchored batch certificate both pass. |
+| `self` | The statement's **maths must hold** — signature, chain linkage, certificate validity dates. Anchoring is waived, so self-attestation and an un-anchored batch certificate both pass. A `none` statement — every synced passkey — is refused. |
 | `basic` | The maths must hold **and** the certificate chain must reach a configured **trust anchor**. Self-attestation is refused. |
 
 Supported formats:
 
 | `fmt` | Who sends it | Attestation type established |
 |---|---|---|
-| `none` | Everything, unless you ask for `direct` | `none` |
-| `packed` | CTAP2 security keys and most platform authenticators | `basic` (x5c) or `self` (no x5c) |
-| `apple` | Apple platform authenticators (Touch ID / Face ID) | `anonca` |
+| `none` | Everything unless you ask for `direct` — and **synced passkeys always** (iCloud Keychain, Google Password Manager, most password managers) | `none` |
+| `packed` | CTAP2 security keys; MDM-managed Apple devices with Apple's Passkey Attestation configuration | `basic` (x5c) or `self` (no x5c) |
+| `apple` | Older **device-bound** Touch ID / Face ID credentials (from before passkeys synced through iCloud Keychain — iOS 16 / macOS 13). Synced iCloud Keychain passkeys send `none`. | `anonca` |
 
 An authenticator presenting anything else under `self`/`basic` is refused by name
 (`UnsupportedAttestationFormat`).
@@ -380,10 +389,20 @@ commonly omits the root). Security keys attest under their vendor's own root, so
 
 The package ships **Apple's published WebAuthn Root CA** and **Google's published
 hardware-attestation roots** in `resources/roots/` (trusted unless
-`PASSKEYS_ATTESTATION_DEFAULT_ANCHORS=false`); every fingerprint is pinned in the test suite. So
-**Apple devices verify under `basic` with no anchor setup at all** — Apple omits the root from its
-`x5c`, and the shipped anchor completes the chain. Every rejection names the format, the offending
-value and the config key that fixes it:
+`PASSKEYS_ATTESTATION_DEFAULT_ANCHORS=false`); every fingerprint is pinned in the test suite. An
+`apple`-format statement therefore anchors under `basic` with no setup — Apple omits the root from
+its `x5c`, and the shipped anchor completes the chain. That covers only the older device-bound
+credentials above: synced iCloud Keychain passkeys carry no statement at all (see the warning under
+[Attestation](#attestation)). The Google roots are for the `android-key` format, which is not
+verified yet (it is refused under `self`/`basic` as an unsupported format).
+
+**Managed Apple devices** can attest: with Apple's *Passkey Attestation* declarative configuration
+(MDM; iOS/iPadOS 17, macOS 14), passkeys created for the relying-party domains it lists carry a
+`packed` statement signed with a certificate identity your MDM provisions (ACME, SCEP or PKCS #12).
+That chain ends at **your organisation's** CA, not Apple's WebAuthn root — add it under
+`attestation_anchors.paths.packed`.
+
+Every rejection names the format, the offending value and the config key that fixes it:
 
 > The `'packed'` attestation chain's root (`"CN=Some Vendor CA, O=Vendor"`, sha256 `9f3ae1c2…`) is
 > not among the configured trust anchors. Add its PEM to
@@ -417,7 +436,8 @@ Two separately catchable outcomes, so forgeries and policy refusals are never co
   mismatch, AAGUID mismatch, a certificate requirement).
 - `AttestationUntrusted` — the statement is sound and **policy refused it** (unanchored root, no
   anchors configured, self-attestation under `basic`, expired certificate, AAGUID not allowed).
-- `AttestationRequired` — the tier demands a statement and the authenticator sent `none`.
+- `AttestationRequired` — the tier demands a statement and the authenticator sent `none` (typically a
+  synced passkey, which never attests; the message says so).
 
 Both extend `PasskeyException`. Setting `attestation_trust` to anything but `ignore` while
 `attestation` is `none` fails at **boot**, not at the first lost registration.
