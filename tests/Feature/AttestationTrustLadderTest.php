@@ -290,6 +290,18 @@ it('refuses a none statement under basic', function (): void {
     enrol($this->user, WebAuthnVectors::es256(), ['fmt' => 'none']);
 })->throws(AttestationRequired::class);
 
+/**
+ * A `none` statement under a strict tier is almost never a misconfigured conveyance (that
+ * fails at boot) — it is a synced passkey, which never attests whatever is requested. The
+ * refusal has to say so, or a host "fixes" config that was never the problem.
+ */
+it('names synced passkeys when it refuses a none statement', function (string $tier): void {
+    trust(['attestation' => 'direct', 'attestation_trust' => $tier]);
+
+    expect(fn () => enrol($this->user, WebAuthnVectors::es256(), ['fmt' => 'none']))
+        ->toThrow(AttestationRequired::class, 'Synced passkeys (iCloud Keychain, Google Password Manager');
+})->with(['self tier' => ['self'], 'basic tier' => ['basic']]);
+
 it('refuses a chain whose certificates do not link', function (): void {
     trust(['attestation' => 'direct', 'attestation_trust' => 'self']);
 

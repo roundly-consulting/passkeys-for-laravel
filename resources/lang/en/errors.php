@@ -45,7 +45,7 @@ return [
 
     // Attestation — policy refused it.
     'unsupported_attestation_format' => 'Attestation format ":format" is not supported. Supported formats: :supported.',
-    'attestation_statement_missing' => 'passkeys.attestation_trust is ":trust" but the authenticator sent a ":format" statement, which proves nothing. Set passkeys.attestation to "direct" and use an authenticator that attests.',
+    'attestation_statement_missing' => 'passkeys.attestation_trust is ":trust" but the authenticator sent a ":format" statement, which proves nothing. Synced passkeys (iCloud Keychain, Google Password Manager, most password managers) never attest, whatever is requested: only device-bound authenticators such as security keys or managed devices can enrol under this setting — set passkeys.attestation_trust to "ignore" to accept them. If this ceremony requested "none" attestation, request "direct" instead.',
     'attestation_root_not_anchored' => 'The ":format" attestation chain\'s root (":subject", sha256 :fingerprint…) is not among the configured trust anchors. Add its PEM to passkeys.attestation_anchors.paths.:format.',
     'attestation_no_anchors' => 'No trust anchors are configured for ":format" attestation. Set passkeys.attestation_anchors.paths.:format.',
     'attestation_self_rejected' => 'attestation_trust "basic" does not accept self-attestation; the ":format" statement presented no attestation certificate.',
