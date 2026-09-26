@@ -17,12 +17,14 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
+use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
 
 /**
  * A drop-in implementation of the HasPasskeys contract.
  *
  * The opaque user handle is generated lazily and persisted to a host-owned
- * column (config `passkeys.user.handle_column`, default `passkey_user_handle`).
+ * column (config `passkeys.user.handle_column`, default `passkey_user_handle`);
+ * create it with the `$table->passkeyUserHandle()` Blueprint macro.
  * The account name / display name default to the model's `email` / `name`
  * attributes and can be repointed via config or overridden per model.
  *
@@ -77,7 +79,7 @@ trait InteractsWithPasskeys
      */
     public function passkeyUserHandle(): string
     {
-        $column = $this->passkeyConfigString('passkeys.user.handle_column', 'passkey_user_handle');
+        $column = UserHandleColumn::name();
         $existing = $this->getAttribute($column);
 
         if (is_string($existing) && $existing !== '') {

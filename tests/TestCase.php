@@ -68,12 +68,13 @@ abstract class TestCase extends PackageTestCase
         });
 
         // A second guard's account table, so ownership checks can prove the owner TYPE
-        // matters when two owners share a key.
+        // matters when two owners share a key. Its handle column comes from the shipped
+        // `passkeyUserHandle()` macro, so every engine leg (sqlite AND pgsql) builds it.
         Schema::create('clients', function (Blueprint $table): void {
             $table->id();
             $table->string('name')->nullable();
             $table->string('email')->nullable();
-            $table->string('passkey_user_handle')->nullable();
+            $table->passkeyUserHandle();
             $table->timestamps();
         });
     }

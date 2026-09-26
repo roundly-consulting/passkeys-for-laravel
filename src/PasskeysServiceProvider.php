@@ -6,6 +6,8 @@ namespace RoundlyConsulting\Passkeys;
 
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\ColumnDefinition;
 use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
@@ -22,6 +24,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
+use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
 
 final class PasskeysServiceProvider extends PackageServiceProvider
 {
@@ -97,6 +100,24 @@ final class PasskeysServiceProvider extends PackageServiceProvider
         // The migration's key-type-aware authenticatable morph is a macro, so it must
         // exist before a host runs `php artisan migrate`.
         $this->registerBlueprintMacros();
+        $this->registerUserHandleMacro();
+    }
+
+    /**
+     * `$table->passkeyUserHandle()` — the host-owned handle column on any account
+     * table: nullable (the handle is minted lazily on first use) and unique (it
+     * resolves exactly one account during a discoverable login).
+     */
+    private function registerUserHandleMacro(): void
+    {
+        if (Blueprint::hasMacro('passkeyUserHandle')) {
+            return;
+        }
+
+        Blueprint::macro('passkeyUserHandle', function (): ColumnDefinition {
+            /** @var Blueprint $this */
+            return $this->string(UserHandleColumn::name())->nullable()->unique();
+        });
     }
 
     /**
