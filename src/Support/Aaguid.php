@@ -10,9 +10,9 @@ use RoundlyConsulting\Crypto\Codec\Hex;
  * The authenticator model identifier carried in authenticator data: 16 raw bytes
  * on the wire, a lowercase formatted UUID at rest and in policy.
  *
- * All-zero means "the authenticator declined to identify itself" (what every
- * `none`-conveyance platform authenticator sends) and is reported as null — an
- * absence, never a model whose id happens to be zero.
+ * All-zero means "no model disclosed" — what browsers substitute for a security
+ * key's AAGUID when a ceremony requests `none` attestation (WebAuthn L2 §5.1.3)
+ * — and is reported as null: an absence, never a model whose id happens to be zero.
  */
 final class Aaguid
 {

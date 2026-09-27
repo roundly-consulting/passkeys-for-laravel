@@ -337,8 +337,9 @@ PASSKEYS_ATTESTATION_TRUST=basic   # and refuse anything unproven
 Ceremony call sites do not change at all — attestation hardening is configuration, not code.
 
 > ⚠️ **Synced passkeys never attest.** iCloud Keychain, Google Password Manager and most password
-> managers answer even a `direct` request with `fmt: none` (Apple's also carry an all-zero AAGUID),
-> because a key that moves between devices has no single device to vouch for. Under `self` or
+> managers answer even a `direct` request with `fmt: none` (their AAGUID names the provider, e.g.
+> iCloud Keychain, never a device), because a key that moves between devices has no single device to
+> vouch for. Under `self` or
 > `basic` every such passkey is refused with `AttestationRequired` — in practice that is **every
 > passkey an unmanaged iPhone, iPad or Mac creates today**. The strict tiers are for fleets of
 > device-bound authenticators (security keys, managed devices); keep `ignore` (the default) for
@@ -404,9 +405,13 @@ That chain ends at **your organisation's** CA, not Apple's WebAuthn root — add
 
 Every rejection names the format, the offending value and the config key that fixes it:
 
-> The `'packed'` attestation chain's root (`"CN=Some Vendor CA, O=Vendor"`, sha256 `9f3ae1c2…`) is
-> not among the configured trust anchors. Add its PEM to
-> `passkeys.attestation_anchors.paths.packed`.
+> The `"packed"` attestation chain's root (`"CN=Vendor Batch 7, O=Vendor"`, sha256 `9f3ae1c2…`,
+> issued by `"CN=Vendor FIDO Root CA, O=Vendor"`) is not among the configured trust anchors. Add the
+> issuing CA's PEM to `passkeys.attestation_anchors.paths.packed`.
+
+With no anchor configured for the format at all (a security key under the defaults, which ship no
+`packed` roots), the refusal still names the CA to fetch: *No trust anchors are configured for
+"packed" attestation; this chain is issued by "CN=Vendor FIDO Root CA, O=Vendor"…*
 
 ### Certificate validity dates
 
@@ -426,7 +431,11 @@ PASSKEYS_AAGUIDS_ALLOWED=d8522d9f-575b-4866-88a9-ba99fa02f35b
 
 Empty (the default) allows every authenticator model. The AAGUID is only **proven** under `basic`
 (the batch certificate binds it); under the lower tiers the authenticator merely asserts it — the
-list is still enforced when configured.
+list is still enforced when configured, `ignore` included.
+
+Under the default `PASSKEYS_ATTESTATION=none`, browsers replace a **security key's** AAGUID with
+zeros (stored as `null` — no model disclosed), so an allow-list refuses every security key until you
+request `direct`. Synced passkeys keep their provider AAGUID either way.
 
 ### Catching failures
 

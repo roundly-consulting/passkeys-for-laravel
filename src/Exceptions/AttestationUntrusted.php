@@ -15,18 +15,19 @@ namespace RoundlyConsulting\Passkeys\Exceptions;
  */
 final class AttestationUntrusted extends PasskeyException
 {
-    public static function rootNotAnchored(string $format, string $rootSubject, string $fingerprint): self
+    public static function rootNotAnchored(string $format, string $rootSubject, string $fingerprint, string $rootIssuer): self
     {
         return new self(self::trans('attestation_root_not_anchored', [
             'format' => $format,
             'subject' => $rootSubject,
             'fingerprint' => substr($fingerprint, 0, 16),
+            'issuer' => $rootIssuer,
         ]));
     }
 
-    public static function noAnchorsConfigured(string $format): self
+    public static function noAnchorsConfigured(string $format, string $issuer): self
     {
-        return new self(self::trans('attestation_no_anchors', ['format' => $format]));
+        return new self(self::trans('attestation_no_anchors', ['format' => $format, 'issuer' => $issuer]));
     }
 
     public static function selfAttestationRejected(string $format): self

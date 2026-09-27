@@ -284,6 +284,33 @@ it('refuses basic when no anchor is configured for the format, naming the key', 
     ]);
 })->throws(AttestationUntrusted::class, 'passkeys.attestation_anchors.paths.packed');
 
+it('names the issuing CA when no anchor is configured and x5c omits the root', function (): void {
+    // A security key's shape: the batch certificate alone, its vendor root left
+    // out. The refusal must say WHICH root to fetch, not just that none is set.
+    trust([
+        'attestation' => 'direct',
+        'attestation_trust' => 'basic',
+        'attestation_anchors' => ['defaults' => false, 'paths' => []],
+    ]);
+
+    enrol($this->user, WebAuthnVectors::es256(), [
+        'fmt' => 'packed',
+        'aaguid' => $this->aaguid,
+        'attStmtFactory' => PackedVectors::chained($this->chain, x5c: [$this->chain->leaf()->der()]),
+    ]);
+})->throws(AttestationUntrusted::class, 'this chain is issued by "CN=Crypto Test Root CA');
+
+it('names the issuing CA of an un-anchored chain that omits its root', function (): void {
+    trust(['attestation' => 'direct', 'attestation_trust' => 'basic']);
+    anchor(PackedVectors::chain());
+
+    enrol($this->user, WebAuthnVectors::es256(), [
+        'fmt' => 'packed',
+        'aaguid' => $this->aaguid,
+        'attStmtFactory' => PackedVectors::chained($this->chain, x5c: [$this->chain->leaf()->der()]),
+    ]);
+})->throws(AttestationUntrusted::class, 'issued by "CN=Crypto Test Root CA');
+
 it('refuses a none statement under basic', function (): void {
     trust(['attestation' => 'direct', 'attestation_trust' => 'basic']);
 
@@ -546,3 +573,24 @@ it('refuses an authenticator that sends no aaguid when a list is configured', fu
         'attStmtFactory' => PackedVectors::selfAttested($vectors),
     ]);
 })->throws(AttestationUntrusted::class, '(none)');
+
+it('enforces a configured allow-list under the default ignore trust too', function (): void {
+    // Ignore never READS the statement, but the allow-list is policy on the
+    // asserted AAGUID, documented as enforced whenever it is configured.
+    trust(['aaguids' => ['allowed' => ['22222222-2222-2222-2222-222222222222']]]);
+
+    enrol($this->user, WebAuthnVectors::es256(), ['fmt' => 'none', 'aaguid' => $this->aaguid]);
+})->throws(AttestationUntrusted::class, '11111111-1111-1111-1111-111111111111');
+
+it('accepts an allow-listed aaguid under the default ignore trust', function (): void {
+    trust(['aaguids' => ['allowed' => ['11111111-1111-1111-1111-111111111111']]]);
+
+    $passkey = enrol($this->user, WebAuthnVectors::es256(), [
+        'fmt' => 'packed',
+        'aaguid' => $this->aaguid,
+        'attStmt' => PackedVectors::statement(-7, 'garbage', ['also-garbage']),
+    ]);
+
+    expect($passkey->aaguid)->toBe('11111111-1111-1111-1111-111111111111')
+        ->and($passkey->attestation_type)->toBe('none');
+});

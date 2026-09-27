@@ -60,7 +60,11 @@ final readonly class AttestationGate implements AttestationVerifier
 
         // The default posture. Byte-for-byte what this package did before any
         // attestation verifier existed: the format is recorded, nothing is read.
+        // A configured allow-list still applies — it judges the asserted AAGUID,
+        // not the statement, and is empty (a no-op) unless the host sets it.
         if ($trust === AttestationTrust::Ignore && ! $this->config->rejectUnknownFmt) {
+            $this->assertAaguidAllowed($authenticatorData);
+
             return AttestationResult::none($format);
         }
 
@@ -151,20 +155,23 @@ final readonly class AttestationGate implements AttestationVerifier
      */
     private function assertAnchored(Chain $path, string $format): void
     {
+        // x5c usually omits the root, so the top certificate's ISSUER is the CA
+        // the operator has to fetch — both refusals name it.
+        $root = $path->root();
+
         if ($this->anchors->for($format) === []) {
-            throw AttestationUntrusted::noAnchorsConfigured($format);
+            throw AttestationUntrusted::noAnchorsConfigured($format, $root->issuer()->toString());
         }
 
         if ($this->anchors->anchorFor($path, $format) !== null) {
             return;
         }
 
-        $root = $path->root();
-
         throw AttestationUntrusted::rootNotAnchored(
             $format,
             $root->subject()->toString(),
             $root->fingerprint(),
+            $root->issuer()->toString(),
         );
     }
 

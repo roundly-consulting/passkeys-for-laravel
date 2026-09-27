@@ -46,8 +46,8 @@ return [
     // Attestation — policy refused it.
     'unsupported_attestation_format' => 'Attestation format ":format" is not supported. Supported formats: :supported.',
     'attestation_statement_missing' => 'passkeys.attestation_trust is ":trust" but the authenticator sent a ":format" statement, which proves nothing. Synced passkeys (iCloud Keychain, Google Password Manager, most password managers) never attest, whatever is requested: only device-bound authenticators such as security keys or managed devices can enrol under this setting — set passkeys.attestation_trust to "ignore" to accept them. If this ceremony requested "none" attestation, request "direct" instead.',
-    'attestation_root_not_anchored' => 'The ":format" attestation chain\'s root (":subject", sha256 :fingerprint…) is not among the configured trust anchors. Add its PEM to passkeys.attestation_anchors.paths.:format.',
-    'attestation_no_anchors' => 'No trust anchors are configured for ":format" attestation. Set passkeys.attestation_anchors.paths.:format.',
+    'attestation_root_not_anchored' => 'The ":format" attestation chain\'s root (":subject", sha256 :fingerprint…, issued by ":issuer") is not among the configured trust anchors. Add the issuing CA\'s PEM to passkeys.attestation_anchors.paths.:format.',
+    'attestation_no_anchors' => 'No trust anchors are configured for ":format" attestation; this chain is issued by ":issuer". Add that CA\'s PEM to passkeys.attestation_anchors.paths.:format.',
     'attestation_self_rejected' => 'attestation_trust "basic" does not accept self-attestation; the ":format" statement presented no attestation certificate.',
     'attestation_chain_not_linked' => 'The ":format" attestation certificate chain is not linked: a certificate is not signed by the one above it.',
     'attestation_certificate_expired' => 'The attestation certificate ":subject" expired at :not_after (clock skew :leeway s).',
