@@ -160,8 +160,31 @@ $user->passkey_user_handle ??= Str::random(43); // 32 random bytes, base64url
 
 ## Usage
 
-The `Passkeys` facade is the single entry point. Each ceremony is two calls: generate options for
-the browser, then verify the browser's response.
+The `Passkeys` facade is the single entry point. Everything scoped to one account goes through
+`Passkeys::for($user)`; the discoverable (usernameless) login stays flat because there is no
+account yet. Each ceremony is two calls: generate options for the browser, then verify the
+browser's response.
+
+```php
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
+
+$keys = Passkeys::for($user);
+
+$keys->registrationOptions(?$overrides);        // CreationOptionsData
+$keys->register($response, name: 'Laptop');     // Passkey
+$keys->authenticationOptions(?$overrides);      // RequestOptionsData bound to this account
+$keys->authenticate($response);                 // Passkey — only this account's credential
+$keys->all();                                   // Collection<Passkey>, newest first
+$keys->find($id);                               // ?Passkey — null for another account's id
+$keys->count();                                 // int
+$keys->exists();                                // bool
+$keys->rename($passkeyOrId, 'Work laptop');     // Passkey — refuses another account's passkey
+$keys->revoke($passkeyOrId);                    // void — refuses another account's passkey
+
+Passkeys::authenticationOptions(?$overrides);   // discoverable (usernameless) login
+Passkeys::authenticate($response, ?$expect);    // → Passkey; $expect holds it to an owner (type)
+Passkeys::attestationFormats();                 // ['none', 'packed', 'apple']
+```
 
 ### Registration
 
@@ -170,13 +193,12 @@ use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 
 // 1. Server -> client: creation options (also stores a single-use challenge).
-$options = Passkeys::registrationOptions($user);
+$options = Passkeys::for($user)->registrationOptions();
 return response()->json($options); // feed publicKey to navigator.credentials.create()
 
 // 2. Client -> server: verify the attestation response and persist the credential.
 //    Pass an optional friendly name for a "your passkeys" screen.
-$passkey = Passkeys::register(
-    $user,
+$passkey = Passkeys::for($user)->register(
     RegistrationResponseData::fromArray($request->validated()),
     name: 'MacBook Touch ID',
 );
@@ -188,8 +210,8 @@ $passkey = Passkeys::register(
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 
-// 1. Server -> client: request options (usernameless by default).
-$options = Passkeys::authenticationOptions();      // or ::authenticationOptions($user)
+// 1. Server -> client: request options (usernameless — any account's passkey can answer).
+$options = Passkeys::authenticationOptions();
 return response()->json($options);                 // feed publicKey to navigator.credentials.get()
 
 // 2. Client -> server: verify the assertion; the resolved credential's owner is reachable
@@ -203,8 +225,9 @@ $user = $passkey->authenticatable;
 The `ceremonyId` returned in the options travels back with the response so a stateless host can
 correlate the challenge; a session-based host can echo it or store the challenge in the session.
 
-Options minted **for a user** (`authenticationOptions($user)`) are bound to that user: the ceremony
-can only be completed with one of the credentials it offered in `allowCredentials`. Another
+Options minted **for a user** (`Passkeys::for($user)->authenticationOptions()`) are bound to that
+user: the ceremony can only be completed with one of the credentials it offered in
+`allowCredentials`. Another
 account's passkey — or one enrolled after the options were issued — gets the same uniform
 `CredentialNotFound` as an unknown credential. Usernameless options stay open to any registered
 credential.
@@ -212,26 +235,28 @@ credential.
 ### Second factor and owner expectations
 
 After a password, magic-link, or one-time-code login you know the account; ask for **its** passkey
-and hold the result to it with an `AuthenticationExpectation`:
+through `Passkeys::for($user)`, which holds the result to that account
+(`AuthenticationExpectation::owner($user)`):
 
 ```php
-use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
 // 1. Options for the known account, demanding user verification for this step only.
-$options = Passkeys::authenticationOptions($user, new AuthenticationOptionsOverrides(
+$options = Passkeys::for($user)->authenticationOptions(new AuthenticationOptionsOverrides(
     userVerification: UserVerification::Required,
     timeoutMs: 30_000,
 ));
 
 // 2. Verify, and refuse any credential that is not this exact account's.
-$passkey = Passkeys::authenticate($response, AuthenticationExpectation::owner($user));
+$passkey = Passkeys::for($user)->authenticate($response);
 ```
 
 With several guards whose models all own passkeys, restrict a usernameless login to one owner type:
 
 ```php
+use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
+
 $passkey = Passkeys::authenticate(
     $response,
     AuthenticationExpectation::ownerType((new Client)->getMorphClass()),
@@ -260,7 +285,7 @@ use RoundlyConsulting\Passkeys\Enums\AuthenticatorAttachment;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
-$options = Passkeys::registrationOptions($user, new RegistrationOptionsOverrides(
+$options = Passkeys::for($user)->registrationOptions(new RegistrationOptionsOverrides(
     userVerification: UserVerification::Preferred,
     attestation: AttestationConveyance::Direct,
     timeoutMs: 30_000,
@@ -295,16 +320,25 @@ against.
 
 ### Managing credentials
 
-Rename or revoke a stored passkey through the facade — no need to touch the model directly. A
-revoked credential is soft-deleted: it can no longer authenticate, and its credential id still
-cannot be re-registered.
+List, rename or revoke an account's passkeys through its handle — no need to touch the model or
+the relation. `rename()` and `revoke()` take a `Passkey` or its id, and refuse a passkey of any
+other account (or an already revoked one) with the uniform `CredentialNotFound`, so a route
+parameter can be passed straight through. A revoked credential is soft-deleted: it can no longer
+authenticate, and its credential id still cannot be re-registered.
 
 ```php
-Passkeys::rename($passkey, 'Work laptop');   // fires PasskeyRenamed
-Passkeys::revoke($passkey);                  // soft-deletes the credential, fires PasskeyRevoked
+$keys = Passkeys::for($request->user());
+
+$keys->all();                                    // newest first
+$keys->find($id);                                // null when it is not this account's
+$keys->count();
+$keys->exists();
+
+$keys->rename($request->route('passkey'), 'Work laptop'); // fires PasskeyRenamed
+$keys->revoke($request->route('passkey'));                // soft-deletes, fires PasskeyRevoked
 ```
 
-Query one owner's credentials from anywhere with the `ownedBy` scope:
+Query one owner's credentials from any other context with the `ownedBy` scope:
 
 ```php
 Passkey::query()->ownedBy($user)->latest('last_used_at')->get();
@@ -318,22 +352,58 @@ array/JSON serialisation. Use the shipped `PasskeyResource` for an explicit, dis
 ```php
 use RoundlyConsulting\Passkeys\Http\Resources\PasskeyResource;
 
-return PasskeyResource::collection($user->passkeys);
+return PasskeyResource::collection(Passkeys::for($user)->all());
 // [{ id, name, aaguid, transports, backup_eligible, backup_state, last_used_at, created_at }]
 ```
 
 ### User-model verbs
 
-The `InteractsWithPasskeys` concern also exposes ceremony verbs so the user model is the subject:
+The `InteractsWithPasskeys` concern also exposes ceremony verbs so the user model is the subject.
+Each delegates to `Passkeys::for($this)`, so `Passkeys::fake()` sees it:
 
 ```php
-$options = $user->passkeyRegistrationOptions();               // ::registrationOptions($user)
-$passkey = $user->registerPasskey($response, 'MacBook Touch ID');
-$options = $user->passkeyAuthenticationOptions($overrides);   // bound to this user's credentials
+$options = $user->passkeyRegistrationOptions();               // ->registrationOptions()
+$passkey = $user->registerPasskey($response, 'MacBook Touch ID'); // ->register()
+$options = $user->passkeyAuthenticationOptions($overrides);   // ->authenticationOptions()
 
-$user->hasPasskeys();   // at least one active (non-revoked) passkey
-$user->passkeyCount();  // how many
+$user->hasPasskeys();   // ->exists() — at least one active (non-revoked) passkey
+$user->passkeyCount();  // ->count()
 ```
+
+### Without the facade
+
+The facade root is the `PasskeyService` contract (implemented by `PasskeyManager`). Inject it for
+the same API — `Passkeys::fake()` swaps this binding too:
+
+```php
+use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
+
+final readonly class RevokePasskeyController
+{
+    public function __construct(private PasskeyService $passkeys) {}
+
+    public function __invoke(Request $request, int $passkey): Response
+    {
+        $this->passkeys->for($request->user())->revoke($passkey);
+
+        return response()->noContent();
+    }
+}
+```
+
+Or run a use case's action directly — each call is one action, resolved from the container:
+
+| Call | Action |
+|---|---|
+| `for($user)->registrationOptions($o)` | `GenerateRegistrationOptionsAction::execute($user, $o)` |
+| `for($user)->register($r, $name)` | `VerifyRegistrationAction::execute($user, $r, $name)` |
+| `for($user)->authenticationOptions($o)` / `authenticationOptions($o)` | `GenerateAuthenticationOptionsAction::execute(?$user, $o)` |
+| `for($user)->authenticate($r)` / `authenticate($r, $expect)` | `VerifyAuthenticationAction::execute($r, ?$expect)` |
+| `for($user)->rename($p, $name)` | `RenamePasskeyAction::execute($passkey, $name)` — **unscoped** |
+| `for($user)->revoke($p)` | `RevokePasskeyAction::execute($passkey)` — **unscoped** |
+
+The rename/revoke actions take a resolved `Passkey` and check no ownership — the handle does that.
+Call them directly only from trusted code (an admin tool, a job that already scoped its query).
 
 ## Attestation
 
@@ -521,7 +591,10 @@ Listen to drive audit trails and anomaly handling:
 
 `Passkeys::fake()` swaps the relying party for a programmable, **no-crypto** double so a host can
 assert its enrolment/login controllers without reproducing authenticator crypto. It performs no
-CBOR/COSE decode, signature verification, or challenge check, and is bound only for the test.
+CBOR/COSE decode, signature verification, or challenge check, and is bound only for the test. The
+facade, the injected `PasskeyService` and the model verbs all see it. `rename()` / `revoke()` run
+the real ownership-checked actions (writes and events included) and are recorded; reads
+(`all`, `find`, `count`, `exists`) go to the database.
 
 ```php
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
@@ -533,17 +606,27 @@ $this->postJson('/passkeys', ['id' => 'x', 'rawId' => 'x', 'response' => []])->a
 
 $fake->assertRegisteredFor($user);
 
+$this->deleteJson("/passkeys/{$passkey->id}")->assertNoContent();
+$fake->assertRevoked($passkey);
+$fake->assertNothingRenamed();
+
 // programmable outcomes:
 Passkeys::fake()->rejectAuthentication();          // authenticate() throws CredentialNotFound
 Passkeys::fake()->authenticatesAs($passkey);       // authenticate() returns this exact credential
 Passkeys::fake()->failRegistrationWith($exception);
 ```
 
-Assertions (`assertRegistered`, `assertRegisteredFor`, `assertNothingRegistered`,
-`assertAuthenticated`, `assertAuthenticatedFor`, `assertAuthenticationFailed`,
-`assertRegistrationCount`, `assertAuthenticationCount`) throw a package exception, so they work
-under any runner. The fake honours `AuthenticationExpectation` and the authentication overrides the
-same way the real service does.
+Assertions throw a package exception, so they work under any runner:
+
+| Recorded call | Assert | Negative |
+|---|---|---|
+| `for($user)->register()` | `assertRegistered()`, `assertRegisteredFor($user)`, `assertRegistrationCount($n)` | `assertNothingRegistered()` |
+| `authenticate()` / `for($user)->authenticate()` | `assertAuthenticated()`, `assertAuthenticatedFor($user)`, `assertAuthenticationFailed()`, `assertAuthenticationCount($n)` | — |
+| `for($user)->rename()` | `assertRenamed(?$passkey, ?$name)` | `assertNothingRenamed()` |
+| `for($user)->revoke()` | `assertRevoked(?$passkey)` | `assertNothingRevoked()` |
+
+The fake honours `AuthenticationExpectation` (and `for($user)->authenticate()` holds the result to
+that account) and the authentication overrides the same way the real service does.
 
 ### Real ceremonies with the virtual authenticator
 
@@ -556,9 +639,9 @@ use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
 
 $authenticator = VirtualAuthenticator::es256();   // rpId from the options, origin from config
 
-$user->registerPasskey($authenticator->register($user->passkeyRegistrationOptions()));
+Passkeys::for($user)->register($authenticator->register(Passkeys::for($user)->registrationOptions()));
 
-$passkey = Passkeys::authenticate($authenticator->assert($user->passkeyAuthenticationOptions()));
+$passkey = Passkeys::for($user)->authenticate($authenticator->assert(Passkeys::for($user)->authenticationOptions()));
 
 // Prove your step-up really demands user verification:
 $authenticator->assert($options, userVerified: false);   // → UserVerificationRequired under `required`
