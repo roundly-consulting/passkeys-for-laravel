@@ -13,7 +13,6 @@ use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\PasskeyManager;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 
@@ -25,10 +24,9 @@ function overridesUseConfiguredVerification(UserVerification $verification): voi
 {
     config()->set('passkeys.user_verification', $verification->value);
 
-    // The manager (and the actions it holds) were resolved during enrolment, so drop
-    // the whole chain — not just the config — for the new default to take effect.
+    // The config was resolved during enrolment, so drop it and the manager for the
+    // new default to take effect.
     app()->forgetInstance(PasskeyConfig::class);
-    app()->forgetInstance(PasskeyManager::class);
     app()->forgetInstance(PasskeyService::class);
     Passkeys::clearResolvedInstances();
 }
@@ -57,7 +55,7 @@ beforeEach(function (): void {
 it('rejects a presence-only assertion when the override requires verification over a preferred default', function (): void {
     overridesUseConfiguredVerification(UserVerification::Preferred);
 
-    $options = Passkeys::authenticationOptions($this->user, new AuthenticationOptionsOverrides(userVerification: UserVerification::Required));
+    $options = Passkeys::for($this->user)->authenticationOptions(new AuthenticationOptionsOverrides(userVerification: UserVerification::Required));
 
     expect($options->jsonSerialize()['publicKey']['userVerification'])->toBe('required');
 
@@ -67,7 +65,7 @@ it('rejects a presence-only assertion when the override requires verification ov
 it('accepts a presence-only assertion under the preferred default without an override', function (): void {
     overridesUseConfiguredVerification(UserVerification::Preferred);
 
-    expect(overridesAssertUpOnly(Passkeys::authenticationOptions($this->user), $this->vectors)->sign_count)->toBe(3);
+    expect(overridesAssertUpOnly(Passkeys::for($this->user)->authenticationOptions(), $this->vectors)->sign_count)->toBe(3);
 });
 
 it('lets an override relax verification for a single ceremony', function (): void {
@@ -84,7 +82,7 @@ it('stores the overridden requirement with the challenge', function (): void {
 });
 
 it('puts the overridden timeout into the options json', function (): void {
-    $options = Passkeys::authenticationOptions($this->user, new AuthenticationOptionsOverrides(timeoutMs: 15_000));
+    $options = Passkeys::for($this->user)->authenticationOptions(new AuthenticationOptionsOverrides(timeoutMs: 15_000));
 
     expect($options->jsonSerialize()['publicKey']['timeout'])->toBe(15_000)
         ->and($options->timeoutMs)->toBe(15_000);

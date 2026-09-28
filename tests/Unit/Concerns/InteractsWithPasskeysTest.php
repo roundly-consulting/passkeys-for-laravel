@@ -100,7 +100,7 @@ it('reports whether the account has passkeys and how many', function (): void {
 it('ignores revoked passkeys in the presence check and count', function (): void {
     $passkey = Passkey::factory()->forAuthenticatable($this->user)->create();
 
-    Passkeys::revoke($passkey);
+    Passkeys::for($this->user)->revoke($passkey);
 
     expect($this->user->hasPasskeys())->toBeFalse()
         ->and($this->user->passkeyCount())->toBe(0);

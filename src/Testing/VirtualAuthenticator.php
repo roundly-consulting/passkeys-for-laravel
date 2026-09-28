@@ -25,12 +25,12 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
  *
  * TEST-ONLY. It holds a throwaway key from crypto's `TestKeys`, attests with `none`,
  * and never belongs in production code. It lives in runtime autoload purely so other
- * packages' suites can reach it, like {@see FakePasskeys}.
+ * packages' suites can reach it, like {@see PasskeysFake}.
  *
  * ```php
  * $authenticator = VirtualAuthenticator::es256();
  * $user->registerPasskey($authenticator->register($user->passkeyRegistrationOptions()));
- * $passkey = Passkeys::authenticate($authenticator->assert($user->passkeyAuthenticationOptions()));
+ * $passkey = Passkeys::for($user)->authenticate($authenticator->assert(Passkeys::for($user)->authenticationOptions()));
  * ```
  *
  * It answers any options it is handed — even ones whose allowCredentials does not name

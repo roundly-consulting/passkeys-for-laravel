@@ -58,7 +58,7 @@ it('fails a presence-only assertion when verification is required', function ():
     $this->user->registerPasskey($authenticator->register($this->user->passkeyRegistrationOptions()));
 
     Passkeys::authenticate($authenticator->assert(
-        Passkeys::authenticationOptions($this->user, new AuthenticationOptionsOverrides(userVerification: UserVerification::Required)),
+        Passkeys::for($this->user)->authenticationOptions(new AuthenticationOptionsOverrides(userVerification: UserVerification::Required)),
         userVerified: false,
     ));
 })->throws(UserVerificationRequired::class);

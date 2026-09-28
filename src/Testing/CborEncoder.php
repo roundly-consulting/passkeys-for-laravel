@@ -10,7 +10,7 @@ namespace RoundlyConsulting\Passkeys\Testing;
  * would send. The relying party itself never encodes CBOR (it only decodes, through
  * crypto-for-laravel), so nothing in production calls this. It lives in runtime
  * autoload only so consuming packages' suites can reach it — the same posture as
- * {@see FakePasskeys}. Supports only the subset the fixtures need.
+ * {@see PasskeysFake}. Supports only the subset the fixtures need.
  */
 final class CborEncoder
 {

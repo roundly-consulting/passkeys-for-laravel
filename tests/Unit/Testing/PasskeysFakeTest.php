@@ -12,7 +12,7 @@ use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Testing\FakePasskeys;
+use RoundlyConsulting\Passkeys\Testing\PasskeysFake;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 
 function fakeRegistrationResponse(): RegistrationResponseData
@@ -27,16 +27,16 @@ function fakeAssertionResponse(): AuthenticationResponseData
 
 beforeEach(function (): void {
     $this->user = User::query()->create(['name' => 'Fake', 'email' => 'fake@example.com']);
-    $this->fake = new FakePasskeys;
+    $this->fake = app(PasskeysFake::class);
 });
 
 it('returns canned option DTOs with no crypto', function (): void {
-    expect($this->fake->registrationOptions($this->user))->toBeInstanceOf(CreationOptionsData::class)
+    expect($this->fake->for($this->user)->registrationOptions())->toBeInstanceOf(CreationOptionsData::class)
         ->and($this->fake->authenticationOptions())->toBeInstanceOf(RequestOptionsData::class);
 });
 
 it('persists a passkey on register and records the call', function (): void {
-    $passkey = $this->fake->register($this->user, fakeRegistrationResponse(), 'My Phone');
+    $passkey = $this->fake->for($this->user)->register(fakeRegistrationResponse(), 'My Phone');
 
     expect($passkey->exists)->toBeTrue()
         ->and($passkey->name)->toBe('My Phone')
@@ -50,7 +50,7 @@ it('persists a passkey on register and records the call', function (): void {
 it('throws the programmed exception on register', function (): void {
     $this->fake->failRegistrationWith(CredentialNotFound::make());
 
-    expect(fn (): Passkey => $this->fake->register($this->user, fakeRegistrationResponse()))
+    expect(fn (): Passkey => $this->fake->for($this->user)->register(fakeRegistrationResponse()))
         ->toThrow(CredentialNotFound::class);
 
     $this->fake->assertNothingRegistered();
@@ -59,11 +59,11 @@ it('throws the programmed exception on register', function (): void {
 it('accepts registration again after being reset', function (): void {
     $this->fake->failRegistrationWith(CredentialNotFound::make())->acceptRegistration();
 
-    expect($this->fake->register($this->user, fakeRegistrationResponse())->exists)->toBeTrue();
+    expect($this->fake->for($this->user)->register(fakeRegistrationResponse())->exists)->toBeTrue();
 });
 
 it('authenticates as the last registered credential by default', function (): void {
-    $registered = $this->fake->register($this->user, fakeRegistrationResponse());
+    $registered = $this->fake->for($this->user)->register(fakeRegistrationResponse());
 
     $authenticated = $this->fake->authenticate(fakeAssertionResponse());
 
@@ -88,7 +88,7 @@ it('synthesises a credential when authenticating with none seeded', function ():
 });
 
 it('re-accepts authentication after a rejection', function (): void {
-    $this->fake->register($this->user, fakeRegistrationResponse());
+    $this->fake->for($this->user)->register(fakeRegistrationResponse());
     $this->fake->rejectAuthentication()->acceptAuthentication();
 
     expect($this->fake->authenticate(fakeAssertionResponse())->exists)->toBeTrue();
@@ -103,13 +103,13 @@ it('rejects authentication when programmed to', function (): void {
     $this->fake->assertAuthenticationFailed();
 });
 
-it('renames and revokes a stored credential', function (): void {
+it('renames and revokes a stored credential through the owner handle', function (): void {
     $passkey = Passkey::factory()->forAuthenticatable($this->user)->create();
 
-    $this->fake->rename($passkey, 'Renamed');
+    $this->fake->for($this->user)->rename($passkey, 'Renamed');
     expect($passkey->refresh()->name)->toBe('Renamed');
 
-    $this->fake->revoke($passkey);
+    $this->fake->for($this->user)->revoke($passkey);
     expect($passkey->refresh()->trashed())->toBeTrue();
 });
 
@@ -119,7 +119,7 @@ it('fails assertRegistered when nothing registered', function (): void {
 });
 
 it('fails assertNothingRegistered when a registration happened', function (): void {
-    $this->fake->register($this->user, fakeRegistrationResponse());
+    $this->fake->for($this->user)->register(fakeRegistrationResponse());
 
     expect(fn () => $this->fake->assertNothingRegistered())->toThrow(PasskeyAssertionFailed::class);
 });
@@ -137,20 +137,20 @@ it('fails the count assertions on a mismatch', function (): void {
 
 it('does not match a registration for a different user', function (): void {
     $other = User::query()->create(['name' => 'Other', 'email' => 'other@example.com']);
-    $this->fake->register($this->user, fakeRegistrationResponse());
+    $this->fake->for($this->user)->register(fakeRegistrationResponse());
 
     expect(fn () => $this->fake->assertRegisteredFor($other))->toThrow(PasskeyAssertionFailed::class);
 });
 
 it('honours authentication overrides in the canned options', function (): void {
-    $options = $this->fake->authenticationOptions($this->user, new AuthenticationOptionsOverrides(userVerification: UserVerification::Preferred, timeoutMs: 5_000));
+    $options = $this->fake->for($this->user)->authenticationOptions(new AuthenticationOptionsOverrides(userVerification: UserVerification::Preferred, timeoutMs: 5_000));
 
     expect($options->userVerification)->toBe(UserVerification::Preferred)
         ->and($options->timeoutMs)->toBe(5_000);
 });
 
 it('refuses a credential that misses the owner expectation, recording a failure', function (): void {
-    $this->fake->register($this->user, fakeRegistrationResponse());
+    $this->fake->for($this->user)->register(fakeRegistrationResponse());
 
     expect(fn (): Passkey => $this->fake->authenticate(fakeAssertionResponse(), AuthenticationExpectation::ownerType('client')))
         ->toThrow(CredentialNotFound::class);
@@ -160,7 +160,7 @@ it('refuses a credential that misses the owner expectation, recording a failure'
 });
 
 it('authenticates a credential that meets the owner expectation', function (): void {
-    $this->fake->register($this->user, fakeRegistrationResponse());
+    $this->fake->for($this->user)->register(fakeRegistrationResponse());
 
     $passkey = $this->fake->authenticate(fakeAssertionResponse(), AuthenticationExpectation::owner($this->user));
 

@@ -10,6 +10,7 @@ use RoundlyConsulting\Passkeys\Attestation\AttestationVerifierRegistry;
 use RoundlyConsulting\Passkeys\Attestation\NoneAttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\PackedAttestationVerifier;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
+use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\PasskeyManager;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
@@ -47,8 +48,10 @@ it('resolves the typed config as a singleton', function (): void {
         ->toBe(app(PasskeyConfig::class));
 });
 
-it('resolves the passkey manager as a singleton', function (): void {
-    expect(app(PasskeyManager::class))->toBe(app(PasskeyManager::class));
+it('resolves the passkey service as a singleton manager', function (): void {
+    expect(app(PasskeyService::class))
+        ->toBeInstanceOf(PasskeyManager::class)
+        ->toBe(app(PasskeyService::class));
 });
 
 it('registers the migration so the passkeys table exists', function (): void {

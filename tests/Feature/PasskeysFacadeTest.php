@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
@@ -20,13 +21,15 @@ beforeEach(function (): void {
 });
 
 it('resolves the manager as a singleton behind the facade', function (): void {
-    expect(app(PasskeyManager::class))->toBe(app(PasskeyManager::class));
+    expect(Passkeys::getFacadeRoot())
+        ->toBeInstanceOf(PasskeyManager::class)
+        ->toBe(app(PasskeyService::class));
 });
 
 it('runs a full register then authenticate flow through the facade', function (): void {
     $vectors = WebAuthnVectors::es256();
 
-    $creationOptions = Passkeys::registrationOptions($this->user);
+    $creationOptions = Passkeys::for($this->user)->registrationOptions();
     expect($creationOptions)->toBeInstanceOf(CreationOptionsData::class);
 
     $registration = $vectors->registrationResponse([
@@ -34,7 +37,7 @@ it('runs a full register then authenticate flow through the facade', function ()
         'ceremonyId' => $creationOptions->ceremonyId,
     ]);
 
-    $passkey = Passkeys::register($this->user, RegistrationResponseData::fromArray($registration));
+    $passkey = Passkeys::for($this->user)->register(RegistrationResponseData::fromArray($registration));
     expect($passkey)->toBeInstanceOf(Passkey::class);
 
     $requestOptions = Passkeys::authenticationOptions();
@@ -53,7 +56,7 @@ it('runs a full register then authenticate flow through the facade', function ()
 });
 
 it('honours per-call registration overrides', function (): void {
-    $options = Passkeys::registrationOptions($this->user, new RegistrationOptionsOverrides(
+    $options = Passkeys::for($this->user)->registrationOptions(new RegistrationOptionsOverrides(
         userVerification: UserVerification::Discouraged,
         attestation: AttestationConveyance::Direct,
         timeoutMs: 12_000,
@@ -66,12 +69,12 @@ it('honours per-call registration overrides', function (): void {
 
 it('scopes authentication options to a known user', function (): void {
     $vectors = WebAuthnVectors::es256();
-    $creation = Passkeys::registrationOptions($this->user);
-    Passkeys::register($this->user, RegistrationResponseData::fromArray(
+    $creation = Passkeys::for($this->user)->registrationOptions();
+    Passkeys::for($this->user)->register(RegistrationResponseData::fromArray(
         $vectors->registrationResponse(['challenge' => $creation->challenge, 'ceremonyId' => $creation->ceremonyId]),
     ));
 
-    $scoped = Passkeys::authenticationOptions($this->user);
+    $scoped = Passkeys::for($this->user)->authenticationOptions();
     $usernameless = Passkeys::authenticationOptions();
 
     expect($scoped->allowCredentials)->toHaveCount(1)
@@ -79,7 +82,7 @@ it('scopes authentication options to a known user', function (): void {
 });
 
 it('serialises creation options into the browser JSON shape', function (): void {
-    $options = Passkeys::registrationOptions($this->user);
+    $options = Passkeys::for($this->user)->registrationOptions();
     $json = $options->jsonSerialize();
 
     expect($json)->toHaveKey('publicKey')

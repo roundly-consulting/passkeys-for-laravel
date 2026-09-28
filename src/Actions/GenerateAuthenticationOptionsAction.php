@@ -28,11 +28,11 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
  * to the exact credentials offered in allowCredentials, so the ceremony can only be
  * completed with one of them — never with another account's passkey.
  */
-final class GenerateAuthenticationOptionsAction
+final readonly class GenerateAuthenticationOptionsAction
 {
     public function __construct(
-        private readonly ChallengeRepository $challenges,
-        private readonly PasskeyConfig $config,
+        private ChallengeRepository $challenges,
+        private PasskeyConfig $config,
     ) {}
 
     public function execute(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Exceptions;
 
-use RoundlyConsulting\Passkeys\Testing\FakePasskeys;
+use RoundlyConsulting\Passkeys\Testing\PasskeysFake;
 
 /**
- * Thrown by {@see FakePasskeys} when one of its assertions fails. It is a package
+ * Thrown by {@see PasskeysFake} when one of its assertions fails. It is a package
  * exception (not a PHPUnit assertion) so the fake stays runtime-only and works
  * under any test runner.
  */

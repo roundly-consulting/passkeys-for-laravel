@@ -8,7 +8,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
-use RoundlyConsulting\Passkeys\Testing\FakePasskeys;
+use RoundlyConsulting\Passkeys\Testing\PasskeysFake;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 
 beforeEach(function (): void {
@@ -28,14 +28,14 @@ function integrationAssertion(): AuthenticationResponseData
 it('swaps the bound service for the fake', function (): void {
     $fake = Passkeys::fake();
 
-    expect($fake)->toBeInstanceOf(FakePasskeys::class)
+    expect($fake)->toBeInstanceOf(PasskeysFake::class)
         ->and(app(PasskeyService::class))->toBe($fake);
 });
 
 it('drives a register then authenticate flow through the facade with no crypto', function (): void {
     $fake = Passkeys::fake();
 
-    $passkey = Passkeys::register($this->user, integrationRegistration(), 'Laptop');
+    $passkey = Passkeys::for($this->user)->register(integrationRegistration(), 'Laptop');
     expect($passkey)->toBeInstanceOf(Passkey::class)->and($passkey->name)->toBe('Laptop');
 
     $authenticated = Passkeys::authenticate(integrationAssertion());

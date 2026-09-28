@@ -23,11 +23,11 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
  * Builds PublicKeyCredentialCreationOptions for a registration ceremony and
  * stores the single-use challenge keyed by a fresh ceremony id.
  */
-final class GenerateRegistrationOptionsAction
+final readonly class GenerateRegistrationOptionsAction
 {
     public function __construct(
-        private readonly ChallengeRepository $challenges,
-        private readonly PasskeyConfig $config,
+        private ChallengeRepository $challenges,
+        private PasskeyConfig $config,
     ) {}
 
     public function execute(HasPasskeys $user, ?RegistrationOptionsOverrides $overrides = null): CreationOptionsData

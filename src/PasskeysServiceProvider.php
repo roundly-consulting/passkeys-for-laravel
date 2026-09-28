@@ -86,10 +86,11 @@ final class PasskeysServiceProvider extends PackageServiceProvider
             );
         });
 
-        $this->app->singleton(PasskeyManager::class);
+        // Bound under the contract only: the fake implements the contract, so
+        // injecting PasskeyService is what lets Passkeys::fake() reach DI users.
         $this->app->singleton(
             PasskeyService::class,
-            static fn (Application $app): PasskeyManager => $app->make(PasskeyManager::class),
+            static fn (Application $app): PasskeyManager => new PasskeyManager($app),
         );
     }
 

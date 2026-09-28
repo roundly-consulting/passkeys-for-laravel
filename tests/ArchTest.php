@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\UserPasskeys;
 use RoundlyConsulting\Testing\Arch\ArchPresets;
 
 // Independence guard: the production relying party must implement WebAuthn/FIDO2
@@ -202,17 +203,26 @@ arch('exceptions extend the package base exception')
 ArchPresets::strictTypes('RoundlyConsulting\Passkeys');
 
 /**
- * Exempt from finality, each deliberately:
+ * Exempt from finality, each deliberately (through `$ignoring`, so a stale entry fails):
  *  - Passkey — `passkeys.model` invites a host subclass; `final` is a PHP fatal the moment a
  *    host uses the documented seam. Pinned positively below.
  *  - PasskeyException — the base every passkeys error extends, so a host can catch the whole
  *    surface with one type.
+ *  - UserPasskeys — the `Passkeys::for($user)` handle; `Passkeys::fake()` returns the recording
+ *    subclass `Testing\RecordingUserPasskeys`, so every call through the facade or the model
+ *    verbs is seen by the fake.
  */
-ArchPresets::finalByDefault('RoundlyConsulting\Passkeys')
-    ->ignoring([
-        Passkey::class,
-        PasskeyException::class,
-    ]);
+ArchPresets::finalByDefault('RoundlyConsulting\Passkeys', [
+    Passkey::class,
+    PasskeyException::class,
+    UserPasskeys::class,
+]);
+
+/**
+ * `Models\Passkey` and the `InteractsWithPasskeys` verbs reach behaviour through
+ * `Passkeys::for($this)` — never an action — so the fake sees every call.
+ */
+ArchPresets::modelsGoThroughTheFacade('RoundlyConsulting\Passkeys');
 
 /**
  * The counter-weight, and the fleet's 7×-shipped fatal: `final` on a config-swappable model.

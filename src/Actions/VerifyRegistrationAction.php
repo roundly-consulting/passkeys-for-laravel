@@ -43,16 +43,16 @@ use RoundlyConsulting\Passkeys\Support\PasskeyModel;
  * to crypto-for-laravel; the ceremony — challenge binding, origin, rpIdHash,
  * flag policy, algorithm allow-list, attestation trust — stays here.
  */
-final class VerifyRegistrationAction
+final readonly class VerifyRegistrationAction
 {
-    private readonly Digest $digest;
+    private Digest $digest;
 
     public function __construct(
-        private readonly ChallengeRepository $challenges,
-        private readonly CredentialCrypto $crypto,
-        private readonly AttestationVerifier $attestation,
-        private readonly PasskeyConfig $config,
-        private readonly Dispatcher $events,
+        private ChallengeRepository $challenges,
+        private CredentialCrypto $crypto,
+        private AttestationVerifier $attestation,
+        private PasskeyConfig $config,
+        private Dispatcher $events,
     ) {
         $this->digest = new Digest;
     }

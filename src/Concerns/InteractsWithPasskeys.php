@@ -26,9 +26,13 @@ use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
  * column (config `passkeys.user.handle_column`, default `passkey_user_handle`);
  * create it with the `$table->passkeyUserHandle()` Blueprint macro.
  * The account name / display name default to the model's `email` / `name`
- * attributes and can be repointed via config or overridden per model.
+ * attributes and can be repointed via config or overridden per model. Every
+ * ceremony and count delegates to `Passkeys::for($this)`, so `Passkeys::fake()`
+ * sees it.
  *
  * @mixin Model
+ *
+ * @phpstan-require-extends Model
  *
  * @phpstan-require-implements HasPasskeys
  */
@@ -48,7 +52,7 @@ trait InteractsWithPasskeys
      */
     public function hasPasskeys(): bool
     {
-        return $this->passkeys()->exists();
+        return $this->passkeyService()->for($this)->exists();
     }
 
     /**
@@ -56,7 +60,7 @@ trait InteractsWithPasskeys
      */
     public function passkeyCount(): int
     {
-        return $this->passkeys()->count();
+        return $this->passkeyService()->for($this)->count();
     }
 
     /**
@@ -64,7 +68,7 @@ trait InteractsWithPasskeys
      */
     public function passkeyRegistrationOptions(?RegistrationOptionsOverrides $overrides = null): CreationOptionsData
     {
-        return $this->passkeyService()->registrationOptions($this, $overrides);
+        return $this->passkeyService()->for($this)->registrationOptions($overrides);
     }
 
     /**
@@ -72,7 +76,7 @@ trait InteractsWithPasskeys
      */
     public function registerPasskey(RegistrationResponseData $response, ?string $name = null): Passkey
     {
-        return $this->passkeyService()->register($this, $response, $name);
+        return $this->passkeyService()->for($this)->register($response, $name);
     }
 
     /**
@@ -81,7 +85,7 @@ trait InteractsWithPasskeys
      */
     public function passkeyAuthenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
-        return $this->passkeyService()->authenticationOptions($this, $overrides);
+        return $this->passkeyService()->for($this)->authenticationOptions($overrides);
     }
 
     /**

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Testing;
 
-use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
+use RoundlyConsulting\Passkeys\Attestation\AttestationVerifierRegistry;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
@@ -14,23 +15,26 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverride
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
-use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
-use RoundlyConsulting\Passkeys\Events\PasskeyRenamed;
-use RoundlyConsulting\Passkeys\Events\PasskeyRevoked;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\UserPasskeys;
 
 /**
  * A first-class, no-crypto testing double for {@see PasskeyService}, swapped in by
  * Passkeys::fake(). It performs NO CBOR/COSE decode, NO signature verification,
- * and NO challenge check — outcomes are programmable and every register()/
- * authenticate() call is recorded so a host can assert its passkey enrolment and
- * login flow without reproducing authenticator crypto.
+ * and NO challenge check — ceremony outcomes are programmable and every
+ * register() / authenticate() is recorded so a host can assert its passkey
+ * enrolment and login flow without reproducing authenticator crypto.
+ *
+ * `rename()` / `revoke()` run the real, ownership-checked actions (writes and
+ * events included) and are recorded once they succeed. Reads (`all`, `find`,
+ * `count`, `exists`) go to the database. Calls through the `InteractsWithPasskeys`
+ * verbs are seen too — they route through `Passkeys::for($this)`.
  *
  * Test-only: it lives in runtime autoload purely to follow Laravel's own Fakes
  * pattern, is bound solely via Passkeys::fake(), and must never reach production.
@@ -41,9 +45,12 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
  * $fake = Passkeys::fake();
  * $this->postJson('/passkeys', ['id' => 'x', 'rawId' => 'x', 'response' => []])->assertCreated();
  * $fake->assertRegisteredFor($user);
+ *
+ * $this->deleteJson("/passkeys/{$passkey->id}")->assertNoContent();
+ * $fake->assertRevoked($passkey);
  * ```
  */
-final class FakePasskeys implements PasskeyService
+final class PasskeysFake implements PasskeyService
 {
     private const CANNED_CEREMONY_ID = 'fake-ceremony';
 
@@ -64,6 +71,18 @@ final class FakePasskeys implements PasskeyService
      * @var list<array{passkey: ?Passkey, success: bool}>
      */
     private array $authentications = [];
+
+    /**
+     * @var list<array{passkey: Passkey, name: string}>
+     */
+    private array $renames = [];
+
+    /** @var list<Passkey> */
+    private array $revocations = [];
+
+    public function __construct(
+        private readonly Container $container,
+    ) {}
 
     /**
      * Make register() persist a credential again (the default).
@@ -116,7 +135,41 @@ final class FakePasskeys implements PasskeyService
         return $this;
     }
 
-    public function registrationOptions(HasPasskeys $user, ?RegistrationOptionsOverrides $overrides = null): CreationOptionsData
+    public function for(Model&HasPasskeys $user): UserPasskeys
+    {
+        return new RecordingUserPasskeys($this, $this->container, $user);
+    }
+
+    public function authenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
+    {
+        return $this->fakeAuthenticationOptions($overrides);
+    }
+
+    /**
+     * An expectation is honoured exactly as the real verifier does: a credential of
+     * the wrong owner is a recorded failure with the uniform not-found error.
+     */
+    public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey
+    {
+        return $this->fakeAuthenticate($expect);
+    }
+
+    /**
+     * The real registry's formats — a pure read of the container binding.
+     *
+     * @return list<string>
+     */
+    public function attestationFormats(): array
+    {
+        return $this->container->make(AttestationVerifierRegistry::class)->formats();
+    }
+
+    /**
+     * Canned creation options for `for($user)->registrationOptions()`.
+     *
+     * @internal called by the recording handle
+     */
+    public function fakeRegistrationOptions(HasPasskeys $user, ?RegistrationOptionsOverrides $overrides = null): CreationOptionsData
     {
         return new CreationOptionsData(
             ceremonyId: self::CANNED_CEREMONY_ID,
@@ -133,7 +186,13 @@ final class FakePasskeys implements PasskeyService
         );
     }
 
-    public function register(HasPasskeys $user, RegistrationResponseData $response, ?string $name = null): Passkey
+    /**
+     * Persist a factory credential for `for($user)->register()`, recorded — or
+     * throw the programmed exception.
+     *
+     * @internal called by the recording handle
+     */
+    public function fakeRegister(Model&HasPasskeys $user, ?string $name = null): Passkey
     {
         if ($this->registrationError !== null) {
             throw $this->registrationError;
@@ -151,7 +210,12 @@ final class FakePasskeys implements PasskeyService
         return $passkey;
     }
 
-    public function authenticationOptions(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
+    /**
+     * Canned request options for both the flat and the scoped ceremony.
+     *
+     * @internal called by the recording handle
+     */
+    public function fakeAuthenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
         return new RequestOptionsData(
             ceremonyId: self::CANNED_CEREMONY_ID,
@@ -163,10 +227,11 @@ final class FakePasskeys implements PasskeyService
     }
 
     /**
-     * An expectation is honoured exactly as the real verifier does: a credential of
-     * the wrong owner is a recorded failure with the uniform not-found error.
+     * The programmed authentication outcome, recorded.
+     *
+     * @internal called by the recording handle
      */
-    public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey
+    public function fakeAuthenticate(?AuthenticationExpectation $expect = null): Passkey
     {
         $passkey = $this->acceptsAuthentication
             ? $this->authenticatesAs ?? $this->lastRegisteredPasskey()
@@ -184,28 +249,65 @@ final class FakePasskeys implements PasskeyService
     }
 
     /**
-     * Fires PasskeyRenamed like the real service, so host listeners stay testable
-     * under the fake.
+     * @internal called by the recording handle
      */
-    public function rename(Passkey $passkey, string $name): Passkey
+    public function recordRenamed(Passkey $passkey, string $name): void
     {
-        $previousName = $passkey->name;
-
-        $passkey->forceFill(['name' => $name])->save();
-
-        app(Dispatcher::class)->dispatch(new PasskeyRenamed($passkey, $previousName));
-
-        return $passkey;
+        $this->renames[] = ['passkey' => $passkey, 'name' => $name];
     }
 
     /**
-     * Fires PasskeyRevoked like the real service.
+     * @internal called by the recording handle
      */
-    public function revoke(Passkey $passkey): void
+    public function recordRevoked(Passkey $passkey): void
     {
-        $passkey->delete();
+        $this->revocations[] = $passkey;
+    }
 
-        app(Dispatcher::class)->dispatch(new PasskeyRevoked($passkey));
+    /**
+     * A passkey was renamed — this one, and/or to this name, when given.
+     */
+    public function assertRenamed(?Passkey $passkey = null, ?string $name = null): void
+    {
+        foreach ($this->renames as $rename) {
+            if (($passkey === null || $rename['passkey']->is($passkey)) && ($name === null || $rename['name'] === $name)) {
+                return;
+            }
+        }
+
+        throw PasskeyAssertionFailed::make('Expected a matching passkey rename, but none was recorded.');
+    }
+
+    public function assertNothingRenamed(): void
+    {
+        if ($this->renames !== []) {
+            $count = count($this->renames);
+
+            throw PasskeyAssertionFailed::make("Expected no renames, but {$count} were recorded.");
+        }
+    }
+
+    /**
+     * A passkey was revoked — this one, when given.
+     */
+    public function assertRevoked(?Passkey $passkey = null): void
+    {
+        foreach ($this->revocations as $revoked) {
+            if ($passkey === null || $revoked->is($passkey)) {
+                return;
+            }
+        }
+
+        throw PasskeyAssertionFailed::make('Expected a matching passkey revocation, but none was recorded.');
+    }
+
+    public function assertNothingRevoked(): void
+    {
+        if ($this->revocations !== []) {
+            $count = count($this->revocations);
+
+            throw PasskeyAssertionFailed::make("Expected no revocations, but {$count} were recorded.");
+        }
     }
 
     public function assertRegistered(): void

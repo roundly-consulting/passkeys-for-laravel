@@ -55,7 +55,7 @@ it('keeps an assertion challenge alive for a per-call timeout longer than the tt
 });
 
 it('keeps a registration challenge alive for a per-call timeout longer than the ttl', function (): void {
-    $options = Passkeys::registrationOptions($this->user, new RegistrationOptionsOverrides(timeoutMs: 180_000));
+    $options = Passkeys::for($this->user)->registrationOptions(new RegistrationOptionsOverrides(timeoutMs: 180_000));
 
     expect(lifetimeChallengeAlive($options->ceremonyId, 170))->toBeTrue();
 });

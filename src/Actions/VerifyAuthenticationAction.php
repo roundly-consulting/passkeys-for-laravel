@@ -45,15 +45,15 @@ use RoundlyConsulting\Passkeys\Support\PasskeyModel;
  * algorithm is always the one that credential was registered with — the assertion
  * never gets to choose it.
  */
-final class VerifyAuthenticationAction
+final readonly class VerifyAuthenticationAction
 {
-    private readonly Digest $digest;
+    private Digest $digest;
 
     public function __construct(
-        private readonly ChallengeRepository $challenges,
-        private readonly CredentialCrypto $crypto,
-        private readonly PasskeyConfig $config,
-        private readonly Dispatcher $events,
+        private ChallengeRepository $challenges,
+        private CredentialCrypto $crypto,
+        private PasskeyConfig $config,
+        private Dispatcher $events,
     ) {
         $this->digest = new Digest;
     }

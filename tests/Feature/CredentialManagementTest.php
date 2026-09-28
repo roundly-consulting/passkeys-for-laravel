@@ -20,10 +20,10 @@ beforeEach(function (): void {
 
 function registerNamed(User $user, WebAuthnVectors $vectors, ?string $name): Passkey
 {
-    $options = Passkeys::registrationOptions($user);
+    $options = Passkeys::for($user)->registrationOptions();
     $payload = $vectors->registrationResponse(['challenge' => $options->challenge, 'ceremonyId' => $options->ceremonyId]);
 
-    return Passkeys::register($user, RegistrationResponseData::fromArray($payload), $name);
+    return Passkeys::for($user)->register(RegistrationResponseData::fromArray($payload), $name);
 }
 
 function assertLogin(User $user, WebAuthnVectors $vectors): Passkey
@@ -49,7 +49,7 @@ it('leaves the name null when none is supplied', function (): void {
 it('renames a stored credential', function (): void {
     $passkey = registerNamed($this->user, WebAuthnVectors::es256(), 'Old');
 
-    Passkeys::rename($passkey, 'Work laptop');
+    Passkeys::for($this->user)->rename($passkey, 'Work laptop');
 
     expect($passkey->refresh()->name)->toBe('Work laptop');
 });
@@ -58,7 +58,7 @@ it('revokes a credential so it can no longer authenticate', function (): void {
     $vectors = WebAuthnVectors::es256();
     $passkey = registerNamed($this->user, $vectors, 'Lost key');
 
-    Passkeys::revoke($passkey);
+    Passkeys::for($this->user)->revoke($passkey);
 
     expect($passkey->refresh()->trashed())->toBeTrue();
     expect(fn () => assertLogin($this->user, $vectors))->toThrow(CredentialNotFound::class);
@@ -67,7 +67,7 @@ it('revokes a credential so it can no longer authenticate', function (): void {
 it('still blocks re-registering a revoked credential id', function (): void {
     $vectors = WebAuthnVectors::es256();
     $passkey = registerNamed($this->user, $vectors, null);
-    Passkeys::revoke($passkey);
+    Passkeys::for($this->user)->revoke($passkey);
 
     expect(fn () => registerNamed($this->user, $vectors, null))
         ->toThrow(CredentialAlreadyRegistered::class);
@@ -77,7 +77,7 @@ it('fires PasskeyRenamed with the previous name', function (): void {
     Event::fake([PasskeyRenamed::class]);
     $passkey = registerNamed($this->user, WebAuthnVectors::es256(), 'Old');
 
-    Passkeys::rename($passkey, 'New');
+    Passkeys::for($this->user)->rename($passkey, 'New');
 
     Event::assertDispatched(PasskeyRenamed::class, fn (PasskeyRenamed $event): bool => $event->passkey->is($passkey)
         && $event->previousName === 'Old'
@@ -88,7 +88,7 @@ it('fires PasskeyRenamed with a null previous name for an unnamed credential', f
     Event::fake([PasskeyRenamed::class]);
     $passkey = registerNamed($this->user, WebAuthnVectors::es256(), null);
 
-    Passkeys::rename($passkey, 'First name');
+    Passkeys::for($this->user)->rename($passkey, 'First name');
 
     Event::assertDispatched(PasskeyRenamed::class, fn (PasskeyRenamed $event): bool => $event->previousName === null);
 });
@@ -97,7 +97,7 @@ it('fires PasskeyRevoked after the credential is soft-deleted', function (): voi
     Event::fake([PasskeyRevoked::class]);
     $passkey = registerNamed($this->user, WebAuthnVectors::es256(), 'Lost');
 
-    Passkeys::revoke($passkey);
+    Passkeys::for($this->user)->revoke($passkey);
 
     Event::assertDispatched(PasskeyRevoked::class, fn (PasskeyRevoked $event): bool => $event->passkey->is($passkey)
         && $event->passkey->trashed());
@@ -105,11 +105,11 @@ it('fires PasskeyRevoked after the credential is soft-deleted', function (): voi
 
 it('fires the same lifecycle events under the fake', function (): void {
     Event::fake([PasskeyRenamed::class, PasskeyRevoked::class]);
-    $passkey = Passkey::factory()->create(['name' => 'Before']);
+    $passkey = Passkey::factory()->forAuthenticatable($this->user)->create(['name' => 'Before']);
 
     $fake = Passkeys::fake();
-    Passkeys::rename($passkey, 'After');
-    $fake->revoke($passkey);
+    Passkeys::for($this->user)->rename($passkey, 'After');
+    $fake->for($this->user)->revoke($passkey);
 
     Event::assertDispatched(PasskeyRenamed::class, fn (PasskeyRenamed $event): bool => $event->previousName === 'Before');
     Event::assertDispatched(PasskeyRevoked::class, fn (PasskeyRevoked $event): bool => $event->passkey->trashed());

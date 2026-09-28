@@ -4,42 +4,35 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Contracts;
 
+use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
-use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
-use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
-use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\PasskeyManager;
+use RoundlyConsulting\Passkeys\UserPasskeys;
 
 /**
- * The public passkey ceremony surface behind the Passkeys facade. Extracting the
- * contract lets a host swap the real relying party for a testing double
- * (Passkeys::fake()) without reproducing any authenticator crypto.
+ * The public passkey API and the `Passkeys` facade root: `for($user)` for everything
+ * scoped to one account, plus the user-less discoverable (usernameless) login
+ * ceremony. Inject this contract — `Passkeys::fake()` swaps the container binding,
+ * so constructor-injected code sees the fake too. The real implementation is
+ * {@see PasskeyManager}.
  */
 interface PasskeyService
 {
     /**
-     * Build the creation options for a registration ceremony.
+     * One account's passkeys: register, authenticate, list, rename, revoke.
      */
-    public function registrationOptions(HasPasskeys $user, ?RegistrationOptionsOverrides $overrides = null): CreationOptionsData;
+    public function for(Model&HasPasskeys $user): UserPasskeys;
 
     /**
-     * Verify a registration response and persist the credential, optionally under
-     * a host-supplied friendly name.
-     *
-     * @throws PasskeyException
+     * Request options for a discoverable (usernameless) authentication ceremony —
+     * no credential list, any account's passkey can answer it.
      */
-    public function register(HasPasskeys $user, RegistrationResponseData $response, ?string $name = null): Passkey;
-
-    /**
-     * Build the request options for an authentication ceremony. With a user, the
-     * ceremony is bound to that user and the credentials it offers; without one it
-     * is discoverable (usernameless).
-     */
-    public function authenticationOptions(?HasPasskeys $user = null, ?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData;
+    public function authenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData;
 
     /**
      * Verify an authentication response and return the resolved credential,
@@ -50,14 +43,9 @@ interface PasskeyService
     public function authenticate(AuthenticationResponseData $response, ?AuthenticationExpectation $expect = null): Passkey;
 
     /**
-     * Rename a stored credential (cosmetic only — never a verification input) and
-     * fire PasskeyRenamed.
+     * The attestation formats this relying party can verify (WebAuthn `fmt` values).
+     *
+     * @return list<string>
      */
-    public function rename(Passkey $passkey, string $name): Passkey;
-
-    /**
-     * Revoke (soft-delete) a stored credential so it can no longer authenticate,
-     * and fire PasskeyRevoked.
-     */
-    public function revoke(Passkey $passkey): void;
+    public function attestationFormats(): array;
 }
