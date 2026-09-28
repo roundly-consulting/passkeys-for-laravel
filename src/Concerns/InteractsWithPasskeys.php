@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Concerns;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
@@ -89,14 +90,16 @@ trait InteractsWithPasskeys
     }
 
     /**
-     * The opaque user handle is generated once and persisted to the host-owned
-     * handle column on first use (registration or authentication options). This
-     * is a write on a read-shaped call: under two concurrent first-time option
-     * requests both may persist a handle (last write wins; the value is random,
-     * stable-once-set and non-PII, so the outcome is harmless). Hosts that want
-     * to avoid the lazy write entirely can generate the handle eagerly at user
-     * creation via an observer/migration — see the README "Preparing your user
-     * model" section.
+     * The opaque user handle — base64url of `passkeys.user.handle_bytes` random
+     * bytes — generated once, on first use (registration or authentication
+     * options), and persisted to the host-owned handle column.
+     *
+     * The write is surgical: only the handle column is updated, so any unsaved
+     * edit on the model stays unsaved, and the model is not re-saved. An UNSAVED
+     * model is never inserted — the handle is only set on it, and its own save
+     * persists it (which is how an eager `creating` observer works). The write
+     * only fills an EMPTY column, so under two concurrent first-time requests the
+     * first handle stored wins and both requests return it.
      */
     public function passkeyUserHandle(): string
     {
@@ -110,8 +113,26 @@ trait InteractsWithPasskeys
         $bytes = (int) config('passkeys.user.handle_bytes', 32);
         $handle = Base64Url::encode(Bytes::generate(max($bytes, 16)));
 
+        if (! $this->exists) {
+            $this->setAttribute($column, $handle);
+
+            return $handle;
+        }
+
+        $row = $this->newQueryWithoutScopes()->whereKey($this->getKey());
+
+        $filled = (clone $row)
+            ->where(static fn (Builder $query): Builder => $query->whereNull($column)->orWhere($column, ''))
+            ->toBase()
+            ->update([$column => $handle]);
+
+        if ($filled === 0) {
+            $stored = $row->value($column);
+            $handle = is_string($stored) && $stored !== '' ? $stored : $handle;
+        }
+
         $this->setAttribute($column, $handle);
-        $this->save();
+        $this->syncOriginalAttribute($column);
 
         return $handle;
     }

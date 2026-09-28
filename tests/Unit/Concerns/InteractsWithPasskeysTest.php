@@ -29,6 +29,50 @@ it('lazily generates and persists an opaque user handle', function (): void {
         ->and(strlen(Base64Url::decode($handle)))->toBeGreaterThanOrEqual(16);
 });
 
+it('persists only the handle, never an unrelated unsaved edit', function (): void {
+    $this->user->name = 'Unsaved Rename';
+
+    $handle = $this->user->passkeyUserHandle();
+
+    expect($this->user->isDirty('name'))->toBeTrue()
+        ->and($this->user->isDirty('passkey_user_handle'))->toBeFalse()
+        ->and($this->user->fresh()?->name)->toBe('Barbara')
+        ->and($this->user->fresh()?->passkey_user_handle)->toBe($handle);
+});
+
+it('never inserts an unsaved user, and lets its own save persist the handle', function (): void {
+    $user = new User(['name' => 'Draft', 'email' => 'draft@example.com']);
+
+    $handle = $user->passkeyUserHandle();
+
+    expect($user->exists)->toBeFalse()
+        ->and(User::query()->where('email', 'draft@example.com')->exists())->toBeFalse()
+        ->and($user->passkey_user_handle)->toBe($handle);
+
+    $user->save();
+
+    expect($user->fresh()?->passkey_user_handle)->toBe($handle);
+});
+
+it('generates the handle eagerly from a creating observer', function (): void {
+    User::creating(static function (User $user): void {
+        $user->passkeyUserHandle();
+    });
+
+    $user = User::query()->create(['name' => 'Eager', 'email' => 'eager@example.com']);
+
+    expect($user->fresh()?->passkey_user_handle)->toBeString()
+        ->and(strlen(Base64Url::decode((string) $user->fresh()?->passkey_user_handle)))->toBe(32);
+});
+
+it('keeps the handle a concurrent first-time request already stored', function (): void {
+    // Another request persisted a handle after this model instance was loaded.
+    User::query()->whereKey($this->user->id)->update(['passkey_user_handle' => 'stored-by-the-other-request']);
+
+    expect($this->user->passkeyUserHandle())->toBe('stored-by-the-other-request')
+        ->and($this->user->fresh()?->passkey_user_handle)->toBe('stored-by-the-other-request');
+});
+
 it('returns the same handle on repeated calls', function (): void {
     $first = $this->user->passkeyUserHandle();
     $second = $this->user->passkeyUserHandle();
