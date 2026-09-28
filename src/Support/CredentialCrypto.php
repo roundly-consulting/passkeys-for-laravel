@@ -99,7 +99,7 @@ final readonly class CredentialCrypto
         }
 
         try {
-            return CoseKey::fromDecoded($decoded);
+            return CoseKey::fromCbor($coseBytes);
         } catch (CryptoException $e) {
             throw self::translate($e, MalformedCbor::make($e->getMessage()));
         }
