@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Passkeys\Attestation;
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\X509\Certificate;
 use RoundlyConsulting\Crypto\X509\Chain;
+use RoundlyConsulting\Passkeys\Attestation\Support\CertificateExtensions;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AttestationObject;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
@@ -28,9 +29,9 @@ use RoundlyConsulting\Passkeys\Support\Aaguid;
  *                 opt in sees no behaviour change whatsoever.
  *                 (With reject_unknown_fmt: the format must be one we know AND
  *                 its maths must hold. Anchors are still not consulted.)
- *   SelfAttested  the maths must hold — signature, chain linkage, certificate
- *                 validity dates. Anchoring is WAIVED, so self-attestation and an
- *                 un-anchored batch certificate both pass.
+ *   SelfAttested  the maths must hold — signature, chain linkage, CA constraints,
+ *                 certificate validity dates. Anchoring is WAIVED, so
+ *                 self-attestation and an un-anchored batch certificate both pass.
  *   Basic         the maths must hold AND the chain must reach a configured
  *                 anchor. Self-attestation is refused.
  *
@@ -38,6 +39,16 @@ use RoundlyConsulting\Passkeys\Support\Aaguid;
  * batch certificate is a fact the relying party should not silently bless. The
  * ANCHOR's own dates are not checked — a trust anchor is trusted because it is
  * configured, not because it is unexpired.
+ *
+ * Linkage proves only that a key signed; it never proves the key was ALLOWED to.
+ * So every certificate that signed another one — each x5c entry above the leaf,
+ * and the anchor when it completes the chain — must be a CA (RFC 5280 §6.1.4:
+ * basicConstraints CA:TRUE, keyCertSign when keyUsage is present) whose
+ * pathLenConstraint the chain below it respects. Otherwise any end-entity key an
+ * anchored CA ever issued (a device identity, a client certificate) could mint
+ * "attestation" leaves. Every intermediate counts toward a pathLenConstraint —
+ * stricter than RFC 5280's self-issued exemption, which attestation chains never
+ * need.
  */
 final readonly class AttestationGate implements AttestationVerifier
 {
@@ -45,6 +56,7 @@ final readonly class AttestationGate implements AttestationVerifier
         private AttestationVerifierRegistry $registry,
         private AttestationAnchors $anchors,
         private PasskeyConfig $config,
+        private CertificateExtensions $extensions = new CertificateExtensions,
     ) {}
 
     /**
@@ -108,8 +120,8 @@ final readonly class AttestationGate implements AttestationVerifier
     }
 
     /**
-     * Linkage and validity dates — checked under SelfAttested too, because that
-     * tier waives ANCHORING, not correctness.
+     * Linkage, CA constraints and validity dates — checked under SelfAttested
+     * too, because that tier waives ANCHORING, not correctness.
      *
      * @throws AttestationUntrusted
      */
@@ -119,10 +131,34 @@ final readonly class AttestationGate implements AttestationVerifier
             throw AttestationUntrusted::chainNotLinked($format);
         }
 
+        // x5c[i] signed x5c[i - 1], with i - 1 intermediates between it and the leaf.
+        foreach (array_slice($path->certificates(), 1) as $below => $issuer) {
+            $this->assertMayIssue($issuer, $below, $format);
+        }
+
         $leeway = $this->config->attestationClockSkew;
 
         foreach ($path as $certificate) {
             $this->assertInDate($certificate, $leeway);
+        }
+    }
+
+    /**
+     * RFC 5280 §6.1.4 (k)–(n) for one certificate that signed another in the
+     * path, with $intermediatesBelow certificates between it and the leaf.
+     *
+     * @throws AttestationUntrusted
+     */
+    private function assertMayIssue(Certificate $issuer, int $intermediatesBelow, string $format): void
+    {
+        if (! $this->extensions->mayIssueCertificates($issuer)) {
+            throw AttestationUntrusted::issuerNotCertificateAuthority($format, $issuer->subject()->toString());
+        }
+
+        $limit = $this->extensions->pathLengthConstraint($issuer);
+
+        if ($limit !== null && $intermediatesBelow > $limit) {
+            throw AttestationUntrusted::pathLengthExceeded($format, $issuer->subject()->toString(), $limit);
         }
     }
 
@@ -163,7 +199,15 @@ final readonly class AttestationGate implements AttestationVerifier
             throw AttestationUntrusted::noAnchorsConfigured($format, $root->issuer()->toString());
         }
 
-        if ($this->anchors->anchorFor($path, $format) !== null) {
+        $anchor = $this->anchors->anchorFor($path, $format);
+
+        if ($anchor !== null) {
+            // An anchor that completes the chain SIGNED its top certificate, so it
+            // answers to the same constraints as every other issuer in the path.
+            if (! $anchor->equals($root)) {
+                $this->assertMayIssue($anchor, count($path) - 1, $format);
+            }
+
             return;
         }
 

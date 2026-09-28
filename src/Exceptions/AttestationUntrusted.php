@@ -7,8 +7,10 @@ namespace RoundlyConsulting\Passkeys\Exceptions;
 /**
  * The attestation statement is internally sound, and POLICY refused it: the
  * chain reaches no configured anchor, no anchor is configured at all, the tier
- * does not accept self-attestation, a certificate is outside its validity
- * window, or the AAGUID is not allow-listed.
+ * does not accept self-attestation, the chain is not a valid certification path
+ * (unlinked, or signed by a certificate that is not a CA / exceeds a
+ * pathLenConstraint), a certificate is outside its validity window, or the
+ * AAGUID is not allow-listed.
  *
  * Every message names the format, the offending value, and — where the fix is
  * configuration — the exact config key to set.
@@ -38,6 +40,25 @@ final class AttestationUntrusted extends PasskeyException
     public static function chainNotLinked(string $format): self
     {
         return new self(self::trans('attestation_chain_not_linked', ['format' => $format]));
+    }
+
+    /**
+     * A certificate signed another one in the chain without being allowed to:
+     * no `CA:TRUE`, or a keyUsage without keyCertSign (RFC 5280 §6.1.4).
+     */
+    public static function issuerNotCertificateAuthority(string $format, string $subject): self
+    {
+        return new self(self::trans('attestation_issuer_not_ca', ['format' => $format, 'subject' => $subject]));
+    }
+
+    /** A CA's basicConstraints pathLenConstraint is shorter than the chain below it. */
+    public static function pathLengthExceeded(string $format, string $subject, int $limit): self
+    {
+        return new self(self::trans('attestation_path_length_exceeded', [
+            'format' => $format,
+            'subject' => $subject,
+            'limit' => (string) $limit,
+        ]));
     }
 
     /** Deliberately NOT a signature error — a lapsed batch cert is a date fact. */

@@ -49,6 +49,8 @@ return [
     'attestation_root_not_anchored' => 'The ":format" attestation chain\'s root (":subject", sha256 :fingerprint…, issued by ":issuer") is not among the configured trust anchors. Add the issuing CA\'s PEM to passkeys.attestation_anchors.paths.:format.',
     'attestation_no_anchors' => 'No trust anchors are configured for ":format" attestation; this chain is issued by ":issuer". Add that CA\'s PEM to passkeys.attestation_anchors.paths.:format.',
     'attestation_self_rejected' => 'attestation_trust "basic" does not accept self-attestation; the ":format" statement presented no attestation certificate.',
+    'attestation_issuer_not_ca' => 'The ":format" attestation chain is not a valid certification path: ":subject" signed a certificate in it but is not a certificate authority (it needs basicConstraints CA:TRUE and, when it carries a keyUsage extension, keyCertSign).',
+    'attestation_path_length_exceeded' => 'The ":format" attestation chain is not a valid certification path: ":subject" allows at most :limit intermediate certificate(s) below it (basicConstraints pathLenConstraint), and the chain has more.',
     'attestation_chain_not_linked' => 'The ":format" attestation certificate chain is not linked: a certificate is not signed by the one above it.',
     'attestation_certificate_expired' => 'The attestation certificate ":subject" expired at :not_after (clock skew :leeway s).',
     'attestation_certificate_not_yet_valid' => 'The attestation certificate ":subject" is not valid until :not_before (clock skew :leeway s).',
