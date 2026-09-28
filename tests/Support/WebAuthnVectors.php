@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Passkeys\Tests\Support;
 
 use OpenSSLAsymmetricKey;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RuntimeException;
 
@@ -196,7 +197,10 @@ final class WebAuthnVectors
             $signature = self::tamper($signature);
         }
 
-        $userHandle = $options['userHandle'] ?? null;
+        // A discoverable credential hands back the account handle it was created
+        // with, exactly as a real authenticator does — read off the stored
+        // credential. Pass 'userHandle' => null to model a non-discoverable one.
+        $userHandle = array_key_exists('userHandle', $options) ? $options['userHandle'] : $this->residentUserHandle();
 
         return [
             'id' => Base64Url::encode($this->credentialId),
@@ -210,6 +214,20 @@ final class WebAuthnVectors
             ], static fn (mixed $value): bool => $value !== null),
             'ceremonyId' => self::string($options, 'ceremonyId', 'ceremony'),
         ];
+    }
+
+    /**
+     * The user handle a resident credential stores: the one it was registered
+     * under, or null while it is not registered.
+     */
+    public function residentUserHandle(): ?string
+    {
+        $handle = PasskeyModel::query()
+            ->withTrashed()
+            ->forCredentialId(Base64Url::encode($this->credentialId))
+            ->value('user_handle');
+
+        return is_string($handle) ? Base64Url::decode($handle) : null;
     }
 
     /**

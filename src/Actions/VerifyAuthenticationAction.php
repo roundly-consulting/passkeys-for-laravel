@@ -95,8 +95,9 @@ final readonly class VerifyAuthenticationAction
         }
 
         // §7.2.5-6 — a ceremony minted for a known user only accepts that user's
-        // credentials, and only those it offered in allowCredentials.
-        $this->assertBoundToCeremony($passkey, $challenge);
+        // credentials, and only those it offered in allowCredentials; a
+        // usernameless one needs the response itself to name the account.
+        $this->assertBoundToCeremony($passkey, $challenge, $response);
 
         $this->assertOrigin($clientData, $origins);
 
@@ -142,11 +143,18 @@ final readonly class VerifyAuthenticationAction
     /**
      * The browser omits `userHandle` for a non-discoverable credential, so the
      * response alone cannot prove whose passkey signed. The challenge can: it
-     * remembers who the options were minted for. Misses stay the uniform
-     * not-found error, so the check leaks nothing about other accounts.
+     * remembers who the options were minted for. When it remembers nobody (a
+     * usernameless ceremony), §7.2 step 6 requires the response to carry the
+     * handle — {@see locateCredential()} already held it to the credential.
+     * Misses stay the uniform not-found error, so the check leaks nothing about
+     * other accounts.
      */
-    private function assertBoundToCeremony(Passkey $passkey, ChallengeData $challenge): void
+    private function assertBoundToCeremony(Passkey $passkey, ChallengeData $challenge, AuthenticationResponseData $response): void
     {
+        if ($challenge->userHandle === null && $response->userHandle === null) {
+            throw CredentialNotFound::make();
+        }
+
         if ($challenge->userHandle !== null && ! ConstantTime::equals($challenge->userHandle, $passkey->user_handle)) {
             throw CredentialNotFound::make();
         }

@@ -104,6 +104,9 @@ function frozenAssertion(string $algorithm): array
             'clientDataJSON' => Base64Url::encode($frozen['client_data_json']),
             'authenticatorData' => Base64Url::encode((string) hex2bin($frozen['authenticator_data_hex'])),
             'signature' => Base64Url::encode((string) hex2bin($algorithms[$algorithm]['signature_hex'])),
+            // Unsigned (it is not part of authData or clientDataJSON): the handle
+            // a discoverable credential returns, which a usernameless ceremony requires.
+            'userHandle' => $frozen['user_handle'],
         ],
         'ceremonyId' => 'frozen',
     ];
