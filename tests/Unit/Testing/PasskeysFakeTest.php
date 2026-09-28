@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
@@ -10,6 +12,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Testing\PasskeysFake;
@@ -34,6 +37,21 @@ it('returns canned option DTOs with no crypto', function (): void {
     expect($this->fake->for($this->user)->registrationOptions())->toBeInstanceOf(CreationOptionsData::class)
         ->and($this->fake->authenticationOptions())->toBeInstanceOf(RequestOptionsData::class);
 });
+
+it('serialises user.id exactly as the real service does', function (): void {
+    $real = app(PasskeyService::class)->for($this->user)->registrationOptions()->jsonSerialize();
+    $fake = $this->fake->for($this->user)->registrationOptions();
+
+    expect($fake->userHandle)->toBe(Base64Url::decode($this->user->passkeyUserHandle()))
+        ->and($fake->jsonSerialize()['publicKey']['user']['id'])->toBe($this->user->passkeyUserHandle())
+        ->and($fake->jsonSerialize()['publicKey']['user']['id'])->toBe($real['publicKey']['user']['id']);
+});
+
+it('refuses a malformed stored handle in its options, as the real service does', function (): void {
+    $this->user->forceFill(['passkey_user_handle' => 'not base64url!'])->save();
+
+    $this->fake->for($this->user)->registrationOptions();
+})->throws(InvalidClientData::class);
 
 it('persists a passkey on register and records the call', function (): void {
     $passkey = $this->fake->for($this->user)->register(fakeRegistrationResponse(), 'My Phone');

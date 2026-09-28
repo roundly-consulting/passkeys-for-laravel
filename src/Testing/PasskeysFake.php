@@ -6,6 +6,8 @@ namespace RoundlyConsulting\Passkeys\Testing;
 
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Model;
+use RoundlyConsulting\Crypto\Codec\Base64Url;
+use RoundlyConsulting\Crypto\Codec\InvalidEncodingException;
 use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifierRegistry;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
@@ -19,6 +21,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Models\Passkey;
@@ -175,7 +178,7 @@ final class PasskeysFake implements PasskeyService
             ceremonyId: self::CANNED_CEREMONY_ID,
             rpId: 'localhost',
             rpName: 'Fake',
-            userHandle: $user->passkeyUserHandle(),
+            userHandle: self::rawUserHandle($user),
             userName: $user->passkeyUserName(),
             userDisplayName: $user->passkeyDisplayName(),
             challenge: self::CANNED_CHALLENGE,
@@ -184,6 +187,22 @@ final class PasskeysFake implements PasskeyService
             attestation: $overrides->attestation ?? AttestationConveyance::None,
             userVerification: $overrides->userVerification ?? UserVerification::Required,
         );
+    }
+
+    /**
+     * `CreationOptionsData::$userHandle` is the RAW handle (it serialises it to
+     * base64url itself), so the stored handle is decoded exactly as the real
+     * service decodes it — including refusing a malformed one.
+     *
+     * @throws InvalidClientData
+     */
+    private static function rawUserHandle(HasPasskeys $user): string
+    {
+        try {
+            return Base64Url::decode($user->passkeyUserHandle());
+        } catch (InvalidEncodingException) {
+            throw InvalidClientData::malformed();
+        }
     }
 
     /**
