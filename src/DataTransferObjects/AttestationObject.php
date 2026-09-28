@@ -13,6 +13,16 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 final readonly class AttestationObject
 {
     /**
+     * WebAuthn §8.1: an attestation statement format identifier is at most 32
+     * octets of printable US-ASCII, excluding backslash and double quote (VCHAR
+     * without %x22 and %x5C). Held here, at the parse boundary, so a hostile
+     * `fmt` is a clean client-data refusal under every trust tier — `ignore`
+     * included, which stores the format verbatim — and never reaches the
+     * `attestation_format` column.
+     */
+    private const string FORMAT_IDENTIFIER = '/\A[\x21\x23-\x5B\x5D-\x7E]{1,32}\z/';
+
+    /**
      * @param  array<int|string, mixed>  $statement
      */
     public function __construct(
@@ -37,6 +47,10 @@ final readonly class AttestationObject
         $statement = $decoded['attStmt'] ?? [];
 
         if (! is_string($format) || ! is_string($authData) || ! is_array($statement)) {
+            throw InvalidClientData::malformed();
+        }
+
+        if (preg_match(self::FORMAT_IDENTIFIER, $format) !== 1) {
             throw InvalidClientData::malformed();
         }
 

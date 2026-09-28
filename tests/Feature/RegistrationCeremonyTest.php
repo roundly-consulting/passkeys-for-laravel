@@ -230,3 +230,25 @@ it('registers a long roaming-key credential id end to end', function (): void {
     // Re-registering the same long id is still rejected as a duplicate.
     expect(fn () => register($this->user, $vectors))->toThrow(CredentialAlreadyRegistered::class);
 });
+
+it('refuses a wire fmt that is not a WebAuthn format identifier, under the default ignore trust too', function (string $format): void {
+    expect(fn () => register($this->user, WebAuthnVectors::es256(), ['fmt' => $format]))
+        ->toThrow(InvalidClientData::class);
+
+    expect(Passkey::query()->count())->toBe(0);
+})->with([
+    'longer than 32 octets' => [str_repeat('x', 400)],
+    'empty' => [''],
+    'a double quote' => ['pack"ed'],
+    'a backslash' => ['pack\\ed'],
+    'a space' => ['pack ed'],
+    'non-ASCII' => ['packéd'],
+]);
+
+it('records any well-formed format identifier under the default ignore trust', function (string $format): void {
+    expect(register($this->user, WebAuthnVectors::es256(), ['fmt' => $format])->attestation_format)->toBe($format);
+})->with([
+    'a registered format' => ['fido-u2f'],
+    'exactly 32 octets' => [str_repeat('a', 32)],
+    'a reverse-domain name' => ['com.example.fmt'],
+]);

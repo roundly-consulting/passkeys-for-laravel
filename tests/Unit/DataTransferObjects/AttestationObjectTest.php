@@ -34,3 +34,13 @@ it('rejects a map with the wrong member types', function (array $decoded): void 
     'non-string authData' => [['fmt' => 'none', 'authData' => 5]],
     'non-array attStmt' => [['fmt' => 'none', 'authData' => 'raw', 'attStmt' => 'x']],
 ])->throws(InvalidClientData::class);
+
+it('holds fmt to a WebAuthn attestation statement format identifier', function (string $format): void {
+    AttestationObject::fromDecoded(['fmt' => $format, 'authData' => 'raw']);
+})->with([
+    'longer than 32 octets' => [str_repeat('x', 33)],
+    'empty' => [''],
+    'a double quote' => ['"'],
+    'a backslash' => ['\\'],
+    'a control character' => ["pack\ned"],
+])->throws(InvalidClientData::class);
