@@ -53,7 +53,7 @@ final readonly class RecordingUserPasskeys extends UserPasskeys
         return $this->fake->fakeAuthenticate(AuthenticationExpectation::owner($this->user));
     }
 
-    public function rename(Passkey|int $passkey, string $name): Passkey
+    public function rename(Passkey|int|string $passkey, string $name): Passkey
     {
         $renamed = parent::rename($passkey, $name);
 
@@ -62,7 +62,7 @@ final readonly class RecordingUserPasskeys extends UserPasskeys
         return $renamed;
     }
 
-    public function revoke(Passkey|int $passkey): void
+    public function revoke(Passkey|int|string $passkey): void
     {
         $owned = $this->owned($passkey);
 

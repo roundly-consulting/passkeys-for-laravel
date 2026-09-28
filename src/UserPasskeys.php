@@ -91,11 +91,15 @@ readonly class UserPasskeys
     }
 
     /**
-     * One of this account's active passkeys, or null — also for another account's id.
+     * One of this account's active passkeys, or null — also for another account's
+     * id. A string id (a route parameter) is taken as-is; one that is not a
+     * canonical positive integer is simply not found.
      */
-    public function find(int $id): ?Passkey
+    public function find(int|string $id): ?Passkey
     {
-        return $this->user->passkeys()->whereKey($id)->first();
+        $key = self::key($id);
+
+        return $key === null ? null : $this->user->passkeys()->whereKey($key)->first();
     }
 
     public function count(): int
@@ -114,7 +118,7 @@ readonly class UserPasskeys
      *
      * @throws CredentialNotFound when it is not one of this account's active passkeys
      */
-    public function rename(Passkey|int $passkey, string $name): Passkey
+    public function rename(Passkey|int|string $passkey, string $name): Passkey
     {
         return $this->container->make(RenamePasskeyAction::class)->execute($this->owned($passkey), $name);
     }
@@ -125,7 +129,7 @@ readonly class UserPasskeys
      *
      * @throws CredentialNotFound when it is not one of this account's active passkeys
      */
-    public function revoke(Passkey|int $passkey): void
+    public function revoke(Passkey|int|string $passkey): void
     {
         $this->container->make(RevokePasskeyAction::class)->execute($this->owned($passkey));
     }
@@ -135,9 +139,9 @@ readonly class UserPasskeys
      *
      * @throws CredentialNotFound
      */
-    protected function owned(Passkey|int $passkey): Passkey
+    protected function owned(Passkey|int|string $passkey): Passkey
     {
-        if (is_int($passkey)) {
+        if (! $passkey instanceof Passkey) {
             return $this->find($passkey) ?? throw CredentialNotFound::make();
         }
 
@@ -146,5 +150,24 @@ readonly class UserPasskeys
         }
 
         return $passkey;
+    }
+
+    /**
+     * A passkey id as the integer key it is, or null when a string is not one —
+     * canonical digits only, no sign, padding or leading zero, within int range.
+     */
+    private static function key(int|string $id): ?int
+    {
+        if (is_int($id)) {
+            return $id;
+        }
+
+        if (preg_match('/\A[1-9][0-9]*\z/', $id) !== 1) {
+            return null;
+        }
+
+        $key = filter_var($id, FILTER_VALIDATE_INT);
+
+        return is_int($key) ? $key : null;
     }
 }

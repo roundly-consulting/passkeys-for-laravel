@@ -108,6 +108,44 @@ it('renames and revokes by id or by model', function (): void {
     Event::assertDispatchedTimes(PasskeyRevoked::class, 2);
 });
 
+it('takes a route parameter — a string id — straight through', function (): void {
+    Event::fake([PasskeyRenamed::class, PasskeyRevoked::class]);
+    $passkey = Passkey::factory()->forAuthenticatable($this->alice)->create(['name' => 'Old']);
+    $routeParameter = (string) $passkey->getKey();
+
+    $keys = Passkeys::for($this->alice);
+
+    expect($keys->find($routeParameter)?->is($passkey))->toBeTrue()
+        ->and($keys->rename($routeParameter, 'Work laptop')->name)->toBe('Work laptop');
+
+    $keys->revoke($routeParameter);
+
+    expect($passkey->refresh()->trashed())->toBeTrue();
+    Event::assertDispatched(PasskeyRenamed::class);
+    Event::assertDispatched(PasskeyRevoked::class);
+});
+
+it('treats a string that is not a positive integer id as not found', function (string $id): void {
+    $passkey = Passkey::factory()->forAuthenticatable($this->alice)->create(['name' => 'Keep']);
+
+    $keys = Passkeys::for($this->alice);
+
+    expect($keys->find($id))->toBeNull()
+        ->and(fn () => $keys->rename($id, 'Stolen'))->toThrow(CredentialNotFound::class)
+        ->and(fn () => $keys->revoke($id))->toThrow(CredentialNotFound::class)
+        ->and($passkey->refresh()->name)->toBe('Keep')
+        ->and($passkey->trashed())->toBeFalse();
+})->with([
+    'not a number' => ['abc'],
+    'a decimal' => ['1.5'],
+    'negative' => ['-1'],
+    'zero' => ['0'],
+    'empty' => [''],
+    'padded' => [' 1'],
+    'leading zero' => ['01'],
+    'overflowing' => ['99999999999999999999'],
+]);
+
 it('refuses to rename or revoke another account\'s passkey', function (string $verb, bool $byId): void {
     $bobs = Passkey::factory()->forAuthenticatable($this->bob)->create(['name' => 'Bob key']);
     $target = $byId ? $bobs->getKey() : $bobs;
