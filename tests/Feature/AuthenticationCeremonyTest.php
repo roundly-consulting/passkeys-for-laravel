@@ -174,7 +174,7 @@ it('throws on a sign-count regression under the reject policy', function (): voi
 
     $vectors = WebAuthnVectors::es256();
     $passkey = registerVectors($this->user, $vectors);
-    $passkey->touchUsage(10);
+    Passkey::query()->whereKey($passkey->id)->update(['sign_count' => 10]);
 
     authenticate($vectors, ['signCount' => 5]);
 })->throws(SignCountRegression::class);
@@ -183,11 +183,12 @@ it('flags a sign-count regression and proceeds under the flag policy', function 
     Event::fake([PasskeySignCountRegressed::class]);
     $vectors = WebAuthnVectors::es256();
     $passkey = registerVectors($this->user, $vectors);
-    $passkey->touchUsage(10);
+    Passkey::query()->whereKey($passkey->id)->update(['sign_count' => 10]);
 
     $result = authenticate($vectors, ['signCount' => 5]);
 
-    expect($result->sign_count)->toBe(5);
+    // Flagged, allowed — and the higher counter is kept, so a clone stays visible.
+    expect($result->sign_count)->toBe(10);
     Event::assertDispatched(PasskeySignCountRegressed::class);
 });
 

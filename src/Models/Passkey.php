@@ -124,12 +124,68 @@ class Passkey extends Model
             ->where('authenticatable_id', $owner->getKey());
     }
 
-    public function touchUsage(int $signCount): void
+    /**
+     * Move the stored counter FORWARD to $signCount and stamp `last_used_at`, in
+     * one conditional UPDATE (`… WHERE sign_count < ?`). The database decides, not
+     * a comparison made earlier in PHP: two concurrent assertions can never both
+     * advance past each other, and a lower counter never overwrites a higher one.
+     * A counterless authenticator (a static 0) "advances" only while the stored
+     * counter is still 0.
+     *
+     * Returns false — with the model reloaded, so `sign_count` is what is stored
+     * NOW — when the counter did not move: a regression, a concurrent assertion
+     * that got there first, or a credential revoked in the meantime (`trashed()`).
+     */
+    public function advanceSignCount(int $signCount): bool
     {
-        $this->forceFill([
-            'sign_count' => $signCount,
-            'last_used_at' => now(),
-        ])->save();
+        $values = $this->usageStamp(['sign_count' => $signCount]);
+
+        $query = $this->newQuery()->whereKey($this->getKey());
+
+        $query = $signCount === 0
+            ? $query->where('sign_count', 0)
+            : $query->where('sign_count', '<', $signCount);
+
+        if ($query->update($values) !== 1) {
+            $this->refresh();
+
+            return false;
+        }
+
+        $this->forceFill($values)->syncOriginalAttributes(array_keys($values));
+
+        return true;
+    }
+
+    /**
+     * Stamp `last_used_at` WITHOUT moving the counter — an assertion accepted
+     * despite a regression (the `flag` policy).
+     */
+    public function recordUsage(): void
+    {
+        $values = $this->usageStamp([]);
+
+        $this->newQuery()->whereKey($this->getKey())->update($values);
+
+        $this->forceFill($values)->syncOriginalAttributes(array_keys($values));
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private function usageStamp(array $values): array
+    {
+        $now = $this->freshTimestamp();
+        $values['last_used_at'] = $now;
+
+        $updatedAt = $this->getUpdatedAtColumn();
+
+        if ($this->usesTimestamps() && $updatedAt !== null) {
+            $values[$updatedAt] = $now;
+        }
+
+        return $values;
     }
 
     /**

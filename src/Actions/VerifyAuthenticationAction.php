@@ -200,28 +200,31 @@ final readonly class VerifyAuthenticationAction
         }
     }
 
+    /**
+     * §7.2.21 — the counter only ever moves forward, and the database decides:
+     * one conditional UPDATE, so neither a regression nor a concurrent assertion
+     * that advanced it first can ever write a lower counter back. Under `flag` a
+     * clone therefore keeps being flagged on every assertion it makes.
+     */
     private function reconcileSignCount(Passkey $passkey, int $received): void
     {
+        if ($passkey->advanceSignCount($received)) {
+            return;
+        }
+
+        // Revoked while this assertion was being verified.
+        if ($passkey->trashed()) {
+            throw CredentialNotFound::make();
+        }
+
+        // Reloaded: what is stored NOW, at or beyond what was received.
         $stored = $passkey->sign_count;
-
-        // Authenticators reporting a static 0 counter skip the comparison.
-        if ($stored === 0 && $received === 0) {
-            $passkey->touchUsage($received);
-
-            return;
-        }
-
-        if ($received > $stored) {
-            $passkey->touchUsage($received);
-
-            return;
-        }
 
         if ($this->config->signCountPolicy === SignCountPolicy::Reject) {
             throw SignCountRegression::make($stored, $received);
         }
 
         $this->events->dispatch(new PasskeySignCountRegressed($passkey, $stored, $received));
-        $passkey->touchUsage($received);
+        $passkey->recordUsage();
     }
 }

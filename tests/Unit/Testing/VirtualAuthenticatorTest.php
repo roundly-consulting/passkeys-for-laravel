@@ -49,7 +49,8 @@ it('sends an explicit counter, e.g. to simulate a cloned authenticator', functio
     Passkeys::authenticate($authenticator->assert(Passkeys::authenticationOptions(), signCount: 10));
     $regressed = Passkeys::authenticate($authenticator->assert(Passkeys::authenticationOptions(), signCount: 4));
 
-    expect($regressed->sign_count)->toBe(4);
+    // Flagged and allowed, but the stored counter keeps the higher value.
+    expect($regressed->sign_count)->toBe(10);
     Event::assertDispatched(PasskeySignCountRegressed::class);
 });
 
