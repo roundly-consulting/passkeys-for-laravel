@@ -12,7 +12,9 @@ use RoundlyConsulting\Passkeys\Attestation\PackedAttestationVerifier;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 use RoundlyConsulting\Passkeys\PasskeyManager;
+use RoundlyConsulting\Passkeys\PasskeysServiceProvider;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
 
 it('merges the package configuration', function (): void {
@@ -62,4 +64,32 @@ it('derives the rp id from the app url when none is configured', function (): vo
     $config = PasskeyConfig::fromArray([], 'https://derived.example');
 
     expect($config->rpId)->toBe('derived.example');
+});
+
+it('validates the configuration at boot, not at the first ceremony', function (array $config): void {
+    foreach ($config as $key => $value) {
+        config()->set($key, $value);
+    }
+
+    app()->forgetInstance(PasskeyConfig::class);
+
+    $provider = new PasskeysServiceProvider(app());
+    $provider->register();
+
+    expect(fn () => $provider->boot())->toThrow(InvalidConfiguration::class);
+})->with([
+    'an algorithm the relying party does not support' => [['passkeys.algorithms' => [-35]]],
+    'a trust tier with no attestation requested' => [['passkeys.attestation_trust' => 'basic', 'passkeys.attestation' => 'none']],
+    'a clock skew beyond an hour' => [['passkeys.attestation_clock_skew' => 99999]],
+]);
+
+it('boots with zero host configuration', function (): void {
+    config()->set('passkeys', []);
+    app()->forgetInstance(PasskeyConfig::class);
+
+    $provider = new PasskeysServiceProvider(app());
+    $provider->register();
+    $provider->boot();
+
+    expect(app(PasskeyConfig::class)->rpId)->toBe('example.com');
 });

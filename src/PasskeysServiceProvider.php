@@ -21,6 +21,7 @@ use RoundlyConsulting\Passkeys\Attestation\PackedAttestationVerifier;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
@@ -47,15 +48,7 @@ final class PasskeysServiceProvider extends PackageServiceProvider
     {
         parent::register();
 
-        $this->app->singleton(PasskeyConfig::class, static function (): PasskeyConfig {
-            $config = config('passkeys');
-            $appUrl = config('app.url');
-
-            return PasskeyConfig::fromArray(
-                is_array($config) ? $config : [],
-                is_string($appUrl) ? $appUrl : null,
-            );
-        });
+        $this->app->singleton(PasskeyConfig::class, static fn (): PasskeyConfig => self::parseConfig());
 
         $this->app->singleton(ChallengeRepository::class, static function (Application $app): CacheChallengeRepository {
             return new CacheChallengeRepository(
@@ -98,10 +91,32 @@ final class PasskeysServiceProvider extends PackageServiceProvider
     {
         parent::boot();
 
+        // Parse (and so validate) the configuration now: an unsupported algorithm,
+        // a trust tier with no attestation requested, or an out-of-range clock skew
+        // fails the app at boot — not the first user's registration. The zero-config
+        // defaults always parse; rp.id / origins are only ENFORCED per ceremony.
+        // Validated, not cached: the singleton still parses on first use, so a
+        // config change made after boot (e.g. in a test) keeps taking effect.
+        self::parseConfig();
+
         // The migration's key-type-aware authenticatable morph is a macro, so it must
         // exist before a host runs `php artisan migrate`.
         $this->registerBlueprintMacros();
         $this->registerUserHandleMacro();
+    }
+
+    /**
+     * @throws InvalidConfiguration
+     */
+    private static function parseConfig(): PasskeyConfig
+    {
+        $config = config('passkeys');
+        $appUrl = config('app.url');
+
+        return PasskeyConfig::fromArray(
+            is_array($config) ? $config : [],
+            is_string($appUrl) ? $appUrl : null,
+        );
     }
 
     /**

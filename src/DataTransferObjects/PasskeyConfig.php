@@ -13,9 +13,10 @@ use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 
 /**
- * A typed, validated view over `config/passkeys.php`. Security-critical values
- * (rp.id, origins) are resolved eagerly but only *enforced* when a ceremony
- * actually needs them, so the package boots with zero host configuration.
+ * A typed, validated view over `config/passkeys.php`, also parsed by the
+ * service provider at boot so a misconfiguration fails the app there. Security-critical
+ * values (rp.id, origins) are resolved eagerly but only *enforced* when a
+ * ceremony actually needs them, so the package boots with zero host configuration.
  */
 final readonly class PasskeyConfig
 {
