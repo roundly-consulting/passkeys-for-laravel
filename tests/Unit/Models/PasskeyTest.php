@@ -67,8 +67,9 @@ it('advances the counter and stamps last usage', function (): void {
     Carbon::setTestNow('2026-07-09 12:00:00');
     $passkey = Passkey::factory()->neverUsed()->create();
 
-    expect($passkey->advanceSignCount(9))->toBeTrue()
+    expect($passkey->advanceSignCount(9, backupState: true))->toBeTrue()
         ->and($passkey->sign_count)->toBe(9)
+        ->and($passkey->backup_state)->toBeTrue()
         ->and($passkey->isDirty())->toBeFalse()
         ->and($passkey->refresh()->sign_count)->toBe(9)
         ->and($passkey->last_used_at?->toDateTimeString())->toBe('2026-07-09 12:00:00');
@@ -79,21 +80,22 @@ it('advances the counter and stamps last usage', function (): void {
 it('never moves the counter backwards, and reloads what is stored', function (): void {
     $passkey = Passkey::factory()->create(['sign_count' => 20, 'last_used_at' => null]);
 
-    expect($passkey->advanceSignCount(20))->toBeFalse()
-        ->and($passkey->advanceSignCount(4))->toBeFalse()
-        ->and($passkey->advanceSignCount(0))->toBeFalse()
+    expect($passkey->advanceSignCount(20, backupState: true))->toBeFalse()
+        ->and($passkey->advanceSignCount(4, backupState: true))->toBeFalse()
+        ->and($passkey->advanceSignCount(0, backupState: true))->toBeFalse()
         ->and($passkey->sign_count)->toBe(20)
         ->and($passkey->refresh()->last_used_at)->toBeNull();
 });
 
 it('stamps usage without touching the counter or other unsaved edits', function (): void {
     Carbon::setTestNow('2026-07-09 12:00:00');
-    $passkey = Passkey::factory()->create(['sign_count' => 20, 'name' => 'Laptop', 'last_used_at' => null]);
+    $passkey = Passkey::factory()->create(['sign_count' => 20, 'name' => 'Laptop', 'backup_state' => true, 'last_used_at' => null]);
     $passkey->name = 'unsaved edit';
 
-    $passkey->recordUsage();
+    $passkey->recordUsage(backupState: false);
 
     expect($passkey->last_used_at?->toDateTimeString())->toBe('2026-07-09 12:00:00')
+        ->and($passkey->backup_state)->toBeFalse()
         ->and($passkey->isDirty('last_used_at'))->toBeFalse()
         ->and($passkey->isDirty('name'))->toBeTrue()
         ->and($passkey->refresh()->sign_count)->toBe(20)

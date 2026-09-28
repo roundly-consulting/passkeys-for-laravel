@@ -125,8 +125,9 @@ class Passkey extends Model
     }
 
     /**
-     * Move the stored counter FORWARD to $signCount and stamp `last_used_at`, in
-     * one conditional UPDATE (`… WHERE sign_count < ?`). The database decides, not
+     * Move the stored counter FORWARD to $signCount, record the assertion's
+     * backup state (BS — current state, WebAuthn L3 §7.2 step 26) and stamp
+     * `last_used_at`, in one conditional UPDATE (`… WHERE sign_count < ?`). The database decides, not
      * a comparison made earlier in PHP: two concurrent assertions can never both
      * advance past each other, and a lower counter never overwrites a higher one.
      * A counterless authenticator (a static 0) "advances" only while the stored
@@ -136,9 +137,9 @@ class Passkey extends Model
      * NOW — when the counter did not move: a regression, a concurrent assertion
      * that got there first, or a credential revoked in the meantime (`trashed()`).
      */
-    public function advanceSignCount(int $signCount): bool
+    public function advanceSignCount(int $signCount, bool $backupState): bool
     {
-        $values = $this->usageStamp(['sign_count' => $signCount]);
+        $values = $this->usageStamp($backupState, ['sign_count' => $signCount]);
 
         $query = $this->newQuery()->whereKey($this->getKey());
 
@@ -158,12 +159,13 @@ class Passkey extends Model
     }
 
     /**
-     * Stamp `last_used_at` WITHOUT moving the counter — an assertion accepted
-     * despite a regression (the `flag` policy).
+     * Record the backup state and stamp `last_used_at` WITHOUT moving the counter
+     * — an assertion accepted despite a regression (the `flag` policy). Nothing
+     * else is written, so unrelated unsaved edits on the model stay unsaved.
      */
-    public function recordUsage(): void
+    public function recordUsage(bool $backupState): void
     {
-        $values = $this->usageStamp([]);
+        $values = $this->usageStamp($backupState, []);
 
         $this->newQuery()->whereKey($this->getKey())->update($values);
 
@@ -174,9 +176,10 @@ class Passkey extends Model
      * @param  array<string, mixed>  $values
      * @return array<string, mixed>
      */
-    private function usageStamp(array $values): array
+    private function usageStamp(bool $backupState, array $values): array
     {
         $now = $this->freshTimestamp();
+        $values['backup_state'] = $backupState;
         $values['last_used_at'] = $now;
 
         $updatedAt = $this->getUpdatedAtColumn();

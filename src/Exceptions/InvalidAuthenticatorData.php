@@ -21,6 +21,15 @@ final class InvalidAuthenticatorData extends PasskeyException
         return new self(self::trans('backup_state_inconsistent'));
     }
 
+    /**
+     * WebAuthn L3 §7.2 step 19: backup eligibility is fixed when a credential is
+     * created, so an assertion reporting a different BE flag is not that credential.
+     */
+    public static function backupEligibilityChanged(): self
+    {
+        return new self(self::trans('backup_eligibility_changed'));
+    }
+
     public static function attestedDataMissing(): self
     {
         return new self(self::trans('attested_data_missing'));

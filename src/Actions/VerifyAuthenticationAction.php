@@ -107,13 +107,13 @@ final readonly class VerifyAuthenticationAction
             throw RpIdMismatch::make();
         }
 
-        $this->assertFlags($parsed, $challenge->userVerification);
+        $this->assertFlags($parsed, $challenge->userVerification, $passkey);
 
         // §7.2.20-21 — verify the signature over authData ‖ hash(clientDataJSON).
         $this->verifySignature($passkey, $response);
 
-        // §7.2.22 — sign-counter regression handling.
-        $this->reconcileSignCount($passkey, $parsed->signCount);
+        // §7.2.21-26 — sign-counter regression handling, backup state update.
+        $this->reconcileSignCount($passkey, $parsed);
 
         $this->events->dispatch(new PasskeyAuthenticated($passkey));
 
@@ -171,7 +171,7 @@ final readonly class VerifyAuthenticationAction
         }
     }
 
-    private function assertFlags(AuthenticatorData $parsed, UserVerification $userVerification): void
+    private function assertFlags(AuthenticatorData $parsed, UserVerification $userVerification, Passkey $passkey): void
     {
         if (! $parsed->flags->userPresent) {
             throw InvalidAuthenticatorData::userPresenceMissing();
@@ -183,6 +183,12 @@ final readonly class VerifyAuthenticationAction
 
         if ($parsed->flags->backupState && ! $parsed->flags->backupEligible) {
             throw InvalidAuthenticatorData::backupStateInconsistent();
+        }
+
+        // L3 §7.2.19 — backup ELIGIBILITY is fixed at creation; only the backup
+        // STATE may change between assertions.
+        if ($parsed->flags->backupEligible !== $passkey->backup_eligible) {
+            throw InvalidAuthenticatorData::backupEligibilityChanged();
         }
     }
 
@@ -204,11 +210,15 @@ final readonly class VerifyAuthenticationAction
      * §7.2.21 — the counter only ever moves forward, and the database decides:
      * one conditional UPDATE, so neither a regression nor a concurrent assertion
      * that advanced it first can ever write a lower counter back. Under `flag` a
-     * clone therefore keeps being flagged on every assertion it makes.
+     * clone therefore keeps being flagged on every assertion it makes. The
+     * backup state (BS) is current state, recorded on every accepted assertion.
      */
-    private function reconcileSignCount(Passkey $passkey, int $received): void
+    private function reconcileSignCount(Passkey $passkey, AuthenticatorData $parsed): void
     {
-        if ($passkey->advanceSignCount($received)) {
+        $received = $parsed->signCount;
+        $backupState = $parsed->flags->backupState;
+
+        if ($passkey->advanceSignCount($received, $backupState)) {
             return;
         }
 
@@ -225,6 +235,6 @@ final readonly class VerifyAuthenticationAction
         }
 
         $this->events->dispatch(new PasskeySignCountRegressed($passkey, $stored, $received));
-        $passkey->recordUsage();
+        $passkey->recordUsage($backupState);
     }
 }
