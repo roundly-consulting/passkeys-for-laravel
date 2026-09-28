@@ -76,7 +76,14 @@ php artisan vendor:publish --tag="passkeys-translations"
 ## Configuration
 
 `config/passkeys.php` documents every option. The security-critical values are `rp.id` and
-`origins` — they **cannot be safely defaulted** and must be set for a ceremony to run.
+`origins`. `origins` **cannot be safely defaulted**: no ceremony runs until at least one origin is
+set. `rp.id` falls back to the host of `app.url`, so set `PASSKEYS_RP_ID` explicitly when that host
+is not your relying-party domain (e.g. `app.url` is `https://app.example.com` but passkeys should
+work across `example.com`).
+
+The configuration is parsed and validated when the app boots: an unsupported algorithm, a trust
+tier with no attestation requested, or an out-of-range clock skew throws `InvalidConfiguration`
+at boot, not at the first registration.
 
 | Key | Env | Default | Purpose |
 |---|---|---|---|
@@ -105,6 +112,7 @@ php artisan vendor:publish --tag="passkeys-translations"
 | `user.handle_bytes` | — | `32` | Length of the generated opaque user handle, in bytes. |
 | `model` | — | `Passkey::class` | The credential model. Point it at a subclass of `Passkey` to add behaviour; every ceremony resolves it. |
 | `table` | — | `passkeys` | The credential table. Publish the config **before** migrating if you rename it — the migration reads this key. |
+| `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (anything else falls back to `bigint`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
 
 ## Using your own credential model
 
@@ -147,16 +155,23 @@ the methods or repoint them via config.
 
 The user handle is generated **lazily** and persisted on the first call to
 `registrationOptions()`/`authenticationOptions($user)` — a small write on an otherwise read-shaped
-call. The value is random, non-PII, and stable once set, so a rare double-write under concurrent
-first-time requests is harmless (last write wins). If you prefer to avoid the lazy write entirely
-(e.g. under heavy concurrency), generate the handle eagerly when the user is created:
+call. The write touches only the handle column (an unsaved edit on the model stays unsaved) and
+only fills an empty one, so under concurrent first-time requests the first handle stored wins and
+every request uses it. It never inserts an unsaved model: on a model that does not exist yet, the
+handle is only set, and the model's own save persists it.
+
+That makes eager generation a one-liner — call `passkeyUserHandle()` while the user is being
+created:
 
 ```php
-use Illuminate\Support\Str;
-
 // e.g. in a User creating() observer
-$user->passkey_user_handle ??= Str::random(43); // 32 random bytes, base64url
+$user->passkeyUserHandle(); // sets base64url(random_bytes(passkeys.user.handle_bytes))
 ```
+
+If you mint handles yourself, they must be **base64url of random bytes** (at least 16, no padding),
+e.g. `Base64Url::encode(random_bytes(32))` with `RoundlyConsulting\Crypto\Codec\Base64Url`. The
+ceremony decodes the handle strictly, so a string that merely looks like one — `Str::random(43)`,
+say — is refused with `InvalidClientData`.
 
 ## Usage
 
@@ -321,10 +336,12 @@ against.
 ### Managing credentials
 
 List, rename or revoke an account's passkeys through its handle — no need to touch the model or
-the relation. `rename()` and `revoke()` take a `Passkey` or its id, and refuse a passkey of any
-other account (or an already revoked one) with the uniform `CredentialNotFound`, so a route
-parameter can be passed straight through. A revoked credential is soft-deleted: it can no longer
-authenticate, and its credential id still cannot be re-registered.
+the relation. `find()`, `rename()` and `revoke()` take a `Passkey` or its id — an `int`, or the
+`string` a route parameter arrives as — and refuse a passkey of any other account (or an already
+revoked one) with the uniform `CredentialNotFound`, so a route parameter can be passed straight
+through. A string that is not a canonical positive integer is simply not found. A revoked
+credential is soft-deleted: it can no longer authenticate, and its credential id still cannot be
+re-registered.
 
 ```php
 $keys = Passkeys::for($request->user());
@@ -353,7 +370,7 @@ array/JSON serialisation. Use the shipped `PasskeyResource` for an explicit, dis
 use RoundlyConsulting\Passkeys\Http\Resources\PasskeyResource;
 
 return PasskeyResource::collection(Passkeys::for($user)->all());
-// [{ id, name, aaguid, transports, backup_eligible, backup_state, last_used_at, created_at }]
+// [{ id, name, aaguid, attestation_type, transports, backup_eligible, backup_state, last_used_at, created_at }]
 ```
 
 ### User-model verbs
@@ -429,16 +446,19 @@ Ceremony call sites do not change at all — attestation hardening is configurat
 What changes is what you can see afterwards:
 
 ```php
-$passkey->attestation_format;   // 'packed' | 'apple' | 'none'
+$passkey->attestation_format;   // 'packed' | 'apple' | 'none' — under `ignore`, any format the authenticator named
 $passkey->attestation_type;     // 'basic' | 'anonca' | 'self' | 'none' — the grade of proof established
 ```
+
+The recorded `fmt` is always a well-formed WebAuthn format identifier (at most 32 printable ASCII
+characters, no `"` or `\`); anything else is refused with `InvalidClientData`, under every tier.
 
 ### The trust ladder
 
 | `attestation_trust` | What it accepts |
 |---|---|
 | `ignore` (default) | Everything. The format is recorded; **no statement is ever read**. |
-| `self` | The statement's **maths must hold** — signature, chain linkage, certificate validity dates. Anchoring is waived, so self-attestation and an un-anchored batch certificate both pass. A `none` statement — every synced passkey — is refused. |
+| `self` | The statement's **maths must hold** — signature, chain linkage and CA constraints, certificate validity dates. Anchoring is waived, so self-attestation and an un-anchored batch certificate both pass. A `none` statement — every synced passkey — is refused. |
 | `basic` | The maths must hold **and** the certificate chain must reach a configured **trust anchor**. Self-attestation is refused. |
 
 Supported formats:
@@ -461,7 +481,13 @@ makes a statement from another ceremony unusable here. The grade it establishes 
 ### Trust anchors
 
 A chain is anchored when its last certificate **is** an anchor, or is **signed by** one (x5c
-commonly omits the root). Security keys attest under their vendor's own root, so supply it:
+commonly omits the root). Every certificate that signed another one — each x5c entry above the
+leaf, and the anchor when it completes the chain — must be a certificate authority (RFC 5280:
+basicConstraints `CA:TRUE`, and `keyCertSign` when it carries a keyUsage extension), and every
+`pathLenConstraint` must hold. So anchoring your organisation's CA trusts the attestation CAs it
+issues — never an end-entity certificate it issued (a device identity, a client certificate)
+signing "attestation" leaves of its own. Security keys attest under their vendor's own root, so
+supply it:
 
 ```php
 'attestation_anchors' => [
@@ -520,16 +546,18 @@ request `direct`. Synced passkeys keep their provider AAGUID either way.
 
 ### Catching failures
 
-Two separately catchable outcomes, so forgeries and policy refusals are never confused:
+Three separately catchable outcomes, so forgeries and policy refusals are never confused:
 
 - `InvalidAttestation` — the **maths** failed (malformed statement, bad signature, algorithm
   mismatch, AAGUID mismatch, a certificate requirement).
 - `AttestationUntrusted` — the statement is sound and **policy refused it** (unanchored root, no
-  anchors configured, self-attestation under `basic`, expired certificate, AAGUID not allowed).
+  anchors configured, self-attestation under `basic`, a chain that is not a valid certification
+  path (unlinked, or signed by a certificate that is not a CA or exceeds a `pathLenConstraint`),
+  expired certificate, AAGUID not allowed).
 - `AttestationRequired` — the tier demands a statement and the authenticator sent `none` (typically a
   synced passkey, which never attests; the message says so).
 
-Both extend `PasskeyException`. Setting `attestation_trust` to anything but `ignore` while
+All three extend `PasskeyException`. Setting `attestation_trust` to anything but `ignore` while
 `attestation` is `none` fails at **boot**, not at the first lost registration.
 
 ### Testing your policy
@@ -548,7 +576,8 @@ Listen to drive audit trails and anomaly handling:
 - `RoundlyConsulting\Passkeys\Events\PasskeyRegistered`
 - `RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated`
 - `RoundlyConsulting\Passkeys\Events\PasskeySignCountRegressed` — fired when a signature counter
-  fails to advance under the `flag` policy.
+  fails to advance under the `flag` policy. The stored counter is never lowered, so a cloned
+  authenticator is flagged on every assertion it makes, not just the first.
 - `RoundlyConsulting\Passkeys\Events\PasskeyRevoked` — after `revoke()` (e.g. end sessions that
   were established with it).
 - `RoundlyConsulting\Passkeys\Events\PasskeyRenamed` — after `rename()`, with `$previousName`.
@@ -576,11 +605,18 @@ Listen to drive audit trails and anomaly handling:
   own COSE key, never from the assertion, and the configured allow-list is enforced at
   registration.
 - **Sign-counter regression** policy (`reject` or `flag` + event) to surface cloned authenticators.
+  The counter only moves forward, in one conditional `UPDATE … WHERE sign_count < ?`, so neither a
+  regression nor two concurrent assertions can write a lower counter back.
+- **Usernameless assertions name their account** (WebAuthn §7.2 step 6) — options minted for no
+  user require the response's `userHandle`, which must match the credential's.
 - **No user enumeration** — every authentication miss returns a uniform "credential not found".
-- **Backup-eligibility consistency** (a backed-up credential must be backup-eligible).
+- **Backup flags per WebAuthn L3** — a backed-up credential must be backup-eligible; backup
+  **eligibility** (BE) is fixed at registration and an assertion that changes it is refused; backup
+  **state** (BS) is recorded from every accepted assertion, so `backup_state` stays current.
 - **Attestation trust** — a monotone ladder (`ignore` ⊂ `self` ⊂ `basic`) with `ignore` as the
   default: the format is recorded and the statement is never read. `self` verifies the statement's
-  maths; `basic` additionally requires the certificate chain to reach a configured trust anchor.
+  maths (including RFC 5280 CA constraints on every issuer in the chain); `basic` additionally
+  requires the certificate chain to reach a configured trust anchor.
   Format verifiers only prove maths; every trust ruling is made in one place (`AttestationGate`).
   See **Attestation** below.
 - **Roaming-key credential ids** are stored in full (up to ~1364 base64url chars); the unique
@@ -601,8 +637,14 @@ use RoundlyConsulting\Passkeys\Facades\Passkeys;
 
 $fake = Passkeys::fake();
 
-// drive your endpoints with any payload shape…
-$this->postJson('/passkeys', ['id' => 'x', 'rawId' => 'x', 'response' => []])->assertCreated();
+// The fake skips the crypto, not your controller's parsing: RegistrationResponseData::fromArray()
+// still needs the browser's shape with base64url members — any bytes will do.
+$this->postJson('/passkeys', [
+    'id' => 'AAAA',
+    'rawId' => 'AAAA',
+    'type' => 'public-key',
+    'response' => ['clientDataJSON' => 'e30', 'attestationObject' => 'oA'],
+])->assertCreated();
 
 $fake->assertRegisteredFor($user);
 
@@ -650,8 +692,10 @@ $authenticator->credentialId();                          // base64url, as stored
 ```
 
 `register($options, residentKey: false)` models a non-discoverable credential (no `userHandle` on
-assertions). The authenticator answers any options it is given, so a suite can also play the
-attacker and prove the server refuses.
+assertions) — so, as with a real browser, it can only answer options minted for its user
+(`Passkeys::for($user)->authenticationOptions()`); a usernameless ceremony refuses it. The
+authenticator answers any options it is given, so a suite can also play the attacker and prove the
+server refuses.
 
 **Test-only.** Its key is throwaway material from crypto-for-laravel's `TestKeys`; never use it in
 production code. It lives in runtime autoload only so other packages' suites can reach it — the same
