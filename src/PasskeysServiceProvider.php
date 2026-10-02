@@ -11,6 +11,7 @@ use Illuminate\Database\Schema\ColumnDefinition;
 use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Passkeys\Attestation\AppleAttestationVerifier;
 use RoundlyConsulting\Passkeys\Attestation\AttestationAnchors;
 use RoundlyConsulting\Passkeys\Attestation\AttestationGate;
@@ -157,7 +158,7 @@ final class PasskeysServiceProvider extends PackageServiceProvider
         return [
             'Model' => class_basename(PasskeyModel::class()),
             'Relying party' => 'id '.$this->presence(config('passkeys.rp.id')).', name '.$this->presence(config('passkeys.rp.name')),
-            'Origins' => $this->countOf('passkeys.origins', 'origin').', cross-origin '.$this->toggle('passkeys.allow_cross_origin'),
+            'Origins' => $this->countOf('passkeys.origins', 'origin').', cross-origin '.(Config::boolean('passkeys.allow_cross_origin') ? 'ON' : 'OFF'),
             'Algorithms' => $this->countOf('passkeys.algorithms', 'algorithm'),
             'User verification' => $this->stringOr('passkeys.user_verification', 'required'),
             'Resident key' => $this->stringOr('passkeys.resident_key', 'required'),
@@ -167,8 +168,8 @@ final class PasskeysServiceProvider extends PackageServiceProvider
                 .(is_string(config('passkeys.challenge.store')) ? 'CUSTOM' : 'DEFAULT'),
             'Attestation' => 'conveyance '.$this->stringOr('passkeys.attestation', 'none')
                 .', trust '.$this->stringOr('passkeys.attestation_trust', 'ignore')
-                .', unknown formats '.(config('passkeys.reject_unknown_fmt') === true ? 'REJECTED' : 'ACCEPTED'),
-            'Trust anchors' => 'bundled roots '.($this->boolOr('passkeys.attestation_anchors.defaults', true) ? 'ON' : 'OFF')
+                .', unknown formats '.(Config::boolean('passkeys.reject_unknown_fmt') ? 'REJECTED' : 'ACCEPTED'),
+            'Trust anchors' => 'bundled roots '.(Config::boolean('passkeys.attestation_anchors.defaults', true) ? 'ON' : 'OFF')
                 .', '.count($anchorPaths).' host path(s), skew '
                 .$this->intOr('passkeys.attestation_clock_skew', 60).'s',
             'AAGUID allow-list' => $aaguids === [] ? 'ANY' : count($aaguids).' allowed',
@@ -181,18 +182,6 @@ final class PasskeysServiceProvider extends PackageServiceProvider
     private function presence(mixed $value): string
     {
         return is_string($value) && $value !== '' ? 'SET' : 'MISSING';
-    }
-
-    private function toggle(string $key): string
-    {
-        return config($key) === true ? 'ON' : 'OFF';
-    }
-
-    private function boolOr(string $key, bool $default): bool
-    {
-        $value = config($key);
-
-        return is_bool($value) ? $value : $default;
     }
 
     private function stringOr(string $key, string $default): string

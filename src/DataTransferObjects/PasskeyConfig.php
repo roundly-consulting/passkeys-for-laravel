@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
 use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
@@ -122,7 +123,7 @@ final readonly class PasskeyConfig
             rpId: $rpId,
             rpName: is_string($rp['name'] ?? null) ? $rp['name'] : 'Laravel',
             origins: $origins,
-            allowCrossOrigin: (bool) ($config['allow_cross_origin'] ?? false),
+            allowCrossOrigin: Config::for($config, InvalidConfiguration::class)->boolean('allow_cross_origin'),
             algorithms: $algorithms,
             timeoutMs: (int) ($config['timeout_ms'] ?? 60_000),
             attestation: $attestation,
@@ -133,8 +134,8 @@ final readonly class PasskeyConfig
             challengeBytes: (int) ($challenge['bytes'] ?? 32),
             signCountPolicy: SignCountPolicy::from(is_string($config['sign_count_policy'] ?? null) ? $config['sign_count_policy'] : 'flag'),
             attestationTrust: $attestationTrust,
-            rejectUnknownFmt: (bool) ($config['reject_unknown_fmt'] ?? false),
-            attestationAnchorDefaults: (bool) ($anchors['defaults'] ?? true),
+            rejectUnknownFmt: Config::for($config, InvalidConfiguration::class)->boolean('reject_unknown_fmt'),
+            attestationAnchorDefaults: Config::for($anchors, InvalidConfiguration::class)->boolean('defaults', true),
             attestationAnchorPaths: self::anchorPaths($anchors['paths'] ?? null),
             attestationClockSkew: self::clockSkew($config['attestation_clock_skew'] ?? 60),
             allowedAaguids: self::aaguids($aaguids['allowed'] ?? null),

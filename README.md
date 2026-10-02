@@ -114,6 +114,10 @@ at boot, not at the first registration.
 | `table` | — | `passkeys` | The credential table. Publish the config **before** migrating if you rename it — the migration reads this key. |
 | `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (anything else falls back to `bigint`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
 
+The three switches (`allow_cross_origin`, `reject_unknown_fmt`, `attestation_anchors.defaults`)
+accept the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`; anything
+unrecognised falls back to the default shown.
+
 ## Using your own credential model
 
 Point `passkeys.model` at a subclass of `RoundlyConsulting\Passkeys\Models\Passkey`. The package

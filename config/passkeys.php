@@ -41,7 +41,7 @@ return [
     )),
 
     // Whether a cross-origin (iframe) ceremony is acceptable. Default: reject.
-    'allow_cross_origin' => (bool) env('PASSKEYS_ALLOW_CROSS_ORIGIN', false),
+    'allow_cross_origin' => env('PASSKEYS_ALLOW_CROSS_ORIGIN', false),
 
     // COSE algorithms offered/accepted, in preference order. Ed25519 (EdDSA,
     // COSE -8) is fully supported — opt in by uncommenting the line below once
@@ -124,7 +124,7 @@ return [
     // Under 'ignore', also refuse a format this package has no verifier for, and
     // refuse a known format whose statement does not verify. Trust anchors are
     // still not consulted. Default: accept everything, verify nothing.
-    'reject_unknown_fmt' => (bool) env('PASSKEYS_REJECT_UNKNOWN_FMT', false),
+    'reject_unknown_fmt' => env('PASSKEYS_REJECT_UNKNOWN_FMT', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -150,7 +150,7 @@ return [
     |
     */
     'attestation_anchors' => [
-        'defaults' => (bool) env('PASSKEYS_ATTESTATION_DEFAULT_ANCHORS', true),
+        'defaults' => env('PASSKEYS_ATTESTATION_DEFAULT_ANCHORS', true),
 
         'paths' => [
             // 'packed' => [storage_path('webauthn/vendor-fido-ca.pem')],

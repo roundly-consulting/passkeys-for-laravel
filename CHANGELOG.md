@@ -37,7 +37,8 @@ Initial public release.
 - Opt-in attestation verification with an `ignore` / `self` / `basic` trust ladder, `packed` and
   `apple` formats, configurable trust anchors (Apple and Google roots shipped), RFC 5280 CA
   constraints (`CA:TRUE`, keyCertSign, pathLenConstraint) on every issuer in a chain, certificate
-  validity checks and an AAGUID allow-list. Configuration is validated at boot.
+  validity checks and an AAGUID allow-list. Configuration is validated at boot, and its switches
+  accept `1`/`0`/`on`/`off`/`yes`/`no` from `.env`.
 - Hardened ceremonies: single-use, ceremony- and user-bound challenges, origin and RP ID checks,
   a forward-only, atomically advanced sign counter with a regression policy (`reject` or `flag`),
   the user handle required on usernameless assertions, WebAuthn L3 backup flags (eligibility

@@ -129,6 +129,29 @@ it('allows a cross-origin ceremony when configured', function (): void {
     expect($passkey->exists)->toBeTrue();
 });
 
+/**
+ * Regression (env-boolean sweep): `(bool) env('PASSKEYS_ALLOW_CROSS_ORIGIN')` turned "off"/"no"
+ * into true — an iframe ceremony the host had switched off was accepted.
+ */
+it('reads the cross-origin switch from an env string', function (string $value, bool $allowed): void {
+    config()->set('passkeys.allow_cross_origin', $value);
+    app()->forgetInstance(PasskeyConfig::class);
+
+    $ceremony = fn (): Passkey => register($this->user, WebAuthnVectors::es256(), ['crossOrigin' => true]);
+
+    if ($allowed) {
+        expect($ceremony()->exists)->toBeTrue();
+    } else {
+        expect($ceremony)->toThrow(OriginMismatch::class);
+    }
+})->with([
+    '"1"' => ['1', true],
+    '"on"' => ['on', true],
+    '"0"' => ['0', false],
+    '"off"' => ['off', false],
+    '"no"' => ['no', false],
+]);
+
 it('rejects a mismatched rp id hash', function (): void {
     register($this->user, WebAuthnVectors::es256(), ['rpId' => 'attacker.test']);
 })->throws(RpIdMismatch::class);
