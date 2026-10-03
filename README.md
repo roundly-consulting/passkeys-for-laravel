@@ -112,15 +112,15 @@ at boot, not at the first registration.
 | `user.handle_bytes` | — | `32` | Length of the generated opaque user handle, in bytes (16–64). |
 | `model` | — | `Passkey::class` | The credential model. Point it at a subclass of `Passkey` to add behaviour; every ceremony resolves it. |
 | `table` | — | `passkeys` | The credential table. Publish the config **before** migrating if you rename it — the migration reads this key. |
-| `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (case-insensitive; unset reads as `bigint`, anything else throws `InvalidConfigurationException`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
+| `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (case-insensitive; unset or blank reads as `bigint`, anything else throws `InvalidConfigurationException`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
 
 The three switches (`allow_cross_origin`, `reject_unknown_fmt`, `attestation_anchors.defaults`)
-accept the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`. Unset or `null`
-reads as the default shown; anything else (a typo such as `disabled`) throws `InvalidConfiguration`
+accept the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`. Not set — absent,
+`null` or blank (`''`, what `KEY=` in `.env` gives) — reads as the default shown; anything else (a typo such as `disabled`) throws `InvalidConfiguration`
 naming the key instead of quietly reading as the default.
 
-Every other key is just as strict. Unset or `null` reads as the default; a present value of the
-wrong shape throws `InvalidConfiguration` naming the key:
+Every other key is just as strict. Not set (absent, `null` or blank) reads as the default; a
+present value of the wrong shape throws `InvalidConfiguration` naming the key:
 
 - integers (`timeout_ms` ≥ 1, `challenge.ttl` ≥ 1, `challenge.bytes` ≥ 16, `user.handle_bytes`
   16–64, `attestation_clock_skew` 0–3600) take an int or a canonical integer string, so `'five'`,
@@ -130,9 +130,10 @@ wrong shape throws `InvalidConfiguration` naming the key:
   default;
 - `origins`, `aaguids.allowed`, `algorithms` and `attestation_anchors.paths` must be lists of
   valid entries; a non-list or a bad entry throws rather than being dropped (an empty
-  `algorithms` list throws too — leave the key unset for the defaults);
-- the string keys (`rp.name`, `user.*` columns and attributes, `table`) must be non-blank
-  strings; `rp.id` and `challenge.store` must be strings when set (blank reads as unset).
+  `algorithms` list throws too — leave the key unset or blank for the defaults);
+- the string keys (`rp.name`, `user.*` columns and attributes, `table`) must be strings, and a
+  blank one is not set → its default (`rp.name` → `APP_NAME`); `rp.id` and `challenge.store`
+  must be strings when set (blank is not set → derived from `app.url` / the default store).
 
 ## Using your own credential model
 
