@@ -98,7 +98,7 @@ at boot, not at the first registration.
 | `resident_key` | `PASSKEYS_RESIDENT_KEY` | `required` | Discoverable-credential posture (`required`/`preferred`/`discouraged`); `required` keeps usernameless login. |
 | `challenge.store` | `PASSKEYS_CHALLENGE_STORE` | default cache store | Cache store name for challenges. |
 | `challenge.ttl` | `PASSKEYS_CHALLENGE_TTL` | `60` | Minimum challenge lifetime in seconds; a challenge always lives at least as long as its ceremony's timeout (config or per-call). |
-| `challenge.bytes` | — | `32` | Random challenge length in bytes. |
+| `challenge.bytes` | — | `32` | Random challenge length in bytes (at least 16). |
 | `sign_count_policy` | — | `flag` | Counter-regression handling: `reject` throws, `flag` fires an event and proceeds. |
 | `attestation_trust` | `PASSKEYS_ATTESTATION_TRUST` | `ignore` | Trust policy for the attestation statement: `ignore` / `self` / `basic` (see **Attestation**). |
 | `reject_unknown_fmt` | `PASSKEYS_REJECT_UNKNOWN_FMT` | `false` | Under `ignore`, refuse a format we cannot verify — and a known format whose statement does not verify. |
@@ -109,7 +109,7 @@ at boot, not at the first registration.
 | `user.handle_column` | `PASSKEYS_USER_HANDLE_COLUMN` | `passkey_user_handle` | Host column holding the opaque user handle. |
 | `user.name_attribute` | — | `email` | Model attribute used as the account name. |
 | `user.display_name_attribute` | — | `name` | Model attribute used as the display name. |
-| `user.handle_bytes` | — | `32` | Length of the generated opaque user handle, in bytes. |
+| `user.handle_bytes` | — | `32` | Length of the generated opaque user handle, in bytes (16–64). |
 | `model` | — | `Passkey::class` | The credential model. Point it at a subclass of `Passkey` to add behaviour; every ceremony resolves it. |
 | `table` | — | `passkeys` | The credential table. Publish the config **before** migrating if you rename it — the migration reads this key. |
 | `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (case-insensitive; unset reads as `bigint`, anything else throws `InvalidConfigurationException`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
@@ -118,6 +118,21 @@ The three switches (`allow_cross_origin`, `reject_unknown_fmt`, `attestation_anc
 accept the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`. Unset or `null`
 reads as the default shown; anything else (a typo such as `disabled`) throws `InvalidConfiguration`
 naming the key instead of quietly reading as the default.
+
+Every other key is just as strict. Unset or `null` reads as the default; a present value of the
+wrong shape throws `InvalidConfiguration` naming the key:
+
+- integers (`timeout_ms` ≥ 1, `challenge.ttl` ≥ 1, `challenge.bytes` ≥ 16, `user.handle_bytes`
+  16–64, `attestation_clock_skew` 0–3600) take an int or a canonical integer string, so `'five'`,
+  `'1.5'` or `'1e3'` throws rather than becoming 0 or being clamped;
+- the enum keys (`attestation`, `attestation_trust`, `user_verification`, `resident_key`,
+  `sign_count_policy`) take a case or its exact value — a typo throws, it never reads as the
+  default;
+- `origins`, `aaguids.allowed`, `algorithms` and `attestation_anchors.paths` must be lists of
+  valid entries; a non-list or a bad entry throws rather than being dropped (an empty
+  `algorithms` list throws too — leave the key unset for the defaults);
+- the string keys (`rp.name`, `user.*` columns and attributes, `table`) must be non-blank
+  strings; `rp.id` and `challenge.store` must be strings when set (blank reads as unset).
 
 ## Using your own credential model
 
