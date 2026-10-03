@@ -22,19 +22,15 @@ final class PasskeyModel
     /**
      * The configured passkey model.
      *
-     * A configured class that is a real Eloquent model but not a {@see Passkey} cannot
-     * serve the package (every action, event and relation is typed against `Passkey`),
-     * so it falls back to the packaged model. A value that is not a model class at all
-     * throws — a credential store pointed at a non-model is a misconfiguration, never a
-     * fallback.
+     * Absent config resolves the packaged model; anything else must be that model or a subclass
+     * of it, or the toolkit's ModelResolver throws InvalidConfigurationException naming the key
+     * — a foreign class is never silently replaced.
      *
      * @return class-string<Passkey>
      */
     public static function class(): string
     {
-        $class = ModelResolver::for('passkeys.model', Passkey::class);
-
-        return is_a($class, Passkey::class, true) ? $class : Passkey::class;
+        return ModelResolver::for('passkeys.model', Passkey::class);
     }
 
     /** @return Builder<Passkey> */

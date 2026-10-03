@@ -39,10 +39,14 @@ it('falls back to the packaged model when none is configured', function (): void
     expect(PasskeyModel::class())->toBe(Passkey::class);
 });
 
-it('falls back to the packaged model when the configured class is not a passkey', function (): void {
+it('refuses a foreign model instead of falling back to the packaged one', function (): void {
+    // The toolkit refuses any class that is not the packaged model or a subclass of it.
     config()->set('passkeys.model', User::class);
 
-    expect(PasskeyModel::class())->toBe(Passkey::class);
+    expect(fn (): string => PasskeyModel::class())->toThrow(
+        InvalidConfigurationException::class,
+        'Configuration value [passkeys.model] must be a class-string of ['.Passkey::class.'], ['.User::class.'] given.',
+    );
 });
 
 it('refuses a configured class that is not a model at all', function (): void {
