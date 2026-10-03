@@ -32,6 +32,7 @@ return [
     // Attestation — configuration.
     'attestation_conveyance_mismatch' => 'passkeys.attestation_trust is ":trust" but passkeys.attestation is "none", so authenticators are told not to attest and every registration would be refused. Set passkeys.attestation to "direct" (PASSKEYS_ATTESTATION=direct).',
     'attestation_invalid_clock_skew' => 'passkeys.attestation_clock_skew must be between 0 and :max seconds; ":seconds" was configured.',
+    'invalid_config_value' => 'passkeys.:key must be :expected; :given was configured.',
     'attestation_unreadable_anchor' => 'The trust anchor ":path" configured in passkeys.attestation_anchors.paths.:format cannot be read or does not contain a PEM certificate.',
 
     // Attestation — the statement's maths failed.

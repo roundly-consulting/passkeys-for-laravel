@@ -62,9 +62,9 @@ it('refuses an unrecognised switch value instead of reading the default', functi
         "Configuration value [{$key}] must be a boolean (true/false, 1/0, on/off or yes/no), [maybe] given.",
     );
 })->with([
-    'allow_cross_origin' => [['allow_cross_origin' => 'maybe'], 'allow_cross_origin'],
-    'reject_unknown_fmt' => [['reject_unknown_fmt' => 'maybe'], 'reject_unknown_fmt'],
-    'attestation_anchors.defaults' => [['attestation_anchors' => ['defaults' => 'maybe']], 'defaults'],
+    'allow_cross_origin' => [['allow_cross_origin' => 'maybe'], 'passkeys.allow_cross_origin'],
+    'reject_unknown_fmt' => [['reject_unknown_fmt' => 'maybe'], 'passkeys.reject_unknown_fmt'],
+    'attestation_anchors.defaults' => [['attestation_anchors' => ['defaults' => 'maybe']], 'passkeys.attestation_anchors.defaults'],
 ]);
 
 /**

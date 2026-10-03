@@ -18,6 +18,7 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
+use RoundlyConsulting\Passkeys\Support\StrictConfig;
 use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
 
 /**
@@ -110,8 +111,9 @@ trait InteractsWithPasskeys
             return $existing;
         }
 
-        $bytes = (int) config('passkeys.user.handle_bytes', 32);
-        $handle = Base64Url::encode(Bytes::generate(max($bytes, 16)));
+        // 16–64 bytes: WebAuthn caps a user handle at 64; fewer than 16 is guessable.
+        $bytes = StrictConfig::integer('user.handle_bytes', config('passkeys.user.handle_bytes'), 32, min: 16, max: 64);
+        $handle = Base64Url::encode(Bytes::generate($bytes));
 
         if (! $this->exists) {
             $this->setAttribute($column, $handle);
@@ -139,29 +141,16 @@ trait InteractsWithPasskeys
 
     public function passkeyUserName(): string
     {
-        $attribute = $this->passkeyConfigString('passkeys.user.name_attribute', 'email');
+        $attribute = StrictConfig::string('user.name_attribute', config('passkeys.user.name_attribute'), 'email');
 
         return (string) ($this->getAttribute($attribute) ?? $this->getKey());
     }
 
     public function passkeyDisplayName(): string
     {
-        $attribute = $this->passkeyConfigString('passkeys.user.display_name_attribute', 'name');
+        $attribute = StrictConfig::string('user.display_name_attribute', config('passkeys.user.display_name_attribute'), 'name');
 
         return (string) ($this->getAttribute($attribute) ?? $this->passkeyUserName());
-    }
-
-    /**
-     * Callers pass the FULL literal key rather than a suffix concatenated onto 'passkeys.'
-     * here. A concatenated key cannot be checked against the shipped config file, which is
-     * the exact shape that let shops #18 read a key the package never shipped while its suite
-     * stayed green. Naming each key whole makes every read verifiable at its call site.
-     */
-    private function passkeyConfigString(string $key, string $default): string
-    {
-        $value = config($key);
-
-        return is_string($value) && $value !== '' ? $value : $default;
     }
 
     private function passkeyService(): PasskeyService

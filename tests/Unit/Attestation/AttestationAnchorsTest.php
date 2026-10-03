@@ -168,11 +168,18 @@ it('fails loudly on a PEM block that is not a certificate', function (): void {
     ])->for('packed');
 })->throws(InvalidConfiguration::class);
 
-it('ignores a malformed anchor path configuration rather than half-reading it', function (): void {
-    $config = PasskeyConfig::fromArray([
-        'attestation_anchors' => ['paths' => ['packed' => 'not-a-list', 3 => ['x.pem'], 'tpm' => [42, '']]],
-    ]);
+it('refuses a malformed anchor path configuration rather than dropping it (strict config)', function (mixed $paths, string $key): void {
+    expect(fn (): PasskeyConfig => PasskeyConfig::fromArray(['attestation_anchors' => ['paths' => $paths]]))
+        ->toThrow(InvalidConfiguration::class, $key);
+})->with([
+    'not a map' => ['packed.pem', 'passkeys.attestation_anchors.paths must be'],
+    'paths not a list' => [['packed' => 'not-a-list'], 'passkeys.attestation_anchors.paths.packed'],
+    'integer format' => [[3 => ['x.pem']], 'keyed by attestation format'],
+    'non-string path' => [['tpm' => [42]], 'passkeys.attestation_anchors.paths.tpm'],
+    'blank path' => [['tpm' => ['']], 'passkeys.attestation_anchors.paths.tpm'],
+]);
 
-    expect($config->attestationAnchorPaths)->toBe([])
-        ->and($config->anchorPathsFor('packed'))->toBe([]);
+it('reads no anchor paths when none are configured', function (): void {
+    expect(PasskeyConfig::fromArray(['attestation_anchors' => ['paths' => null]])->attestationAnchorPaths)->toBe([])
+        ->and(PasskeyConfig::fromArray(['attestation_anchors' => ['paths' => ['packed' => []]]])->anchorPathsFor('packed'))->toBe([]);
 });

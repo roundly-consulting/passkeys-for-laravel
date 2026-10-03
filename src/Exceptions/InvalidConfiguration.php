@@ -50,4 +50,17 @@ final class InvalidConfiguration extends PasskeyException
             'path' => $path,
         ]));
     }
+
+    /**
+     * A configured value of the wrong shape, named by its key under `passkeys.` — a
+     * typo fails loudly instead of reading as the default.
+     */
+    public static function invalidValue(string $key, string $expected, mixed $given): self
+    {
+        return new self(self::trans('invalid_config_value', [
+            'key' => $key,
+            'expected' => $expected,
+            'given' => is_string($given) ? '"'.$given.'"' : get_debug_type($given),
+        ]));
+    }
 }

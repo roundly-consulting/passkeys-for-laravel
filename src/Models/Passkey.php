@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use RoundlyConsulting\Crypto\Hash\Digest;
 use RoundlyConsulting\Passkeys\Database\Factories\PasskeyFactory;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
+use RoundlyConsulting\Passkeys\Support\StrictConfig;
 
 /**
  * A stored WebAuthn credential (passkey).
@@ -79,9 +80,7 @@ class Passkey extends Model
 
     public function getTable(): string
     {
-        $table = config('passkeys.table');
-
-        return is_string($table) ? $table : 'passkeys';
+        return StrictConfig::string('table', config('passkeys.table'), 'passkeys');
     }
 
     /**

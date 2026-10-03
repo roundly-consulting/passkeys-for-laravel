@@ -52,7 +52,7 @@ return [
         // CoseAlgorithm::EdDSA->value, // -8 (requires ext-sodium)
     ],
 
-    'timeout_ms' => (int) env('PASSKEYS_TIMEOUT_MS', 60_000),
+    'timeout_ms' => env('PASSKEYS_TIMEOUT_MS', 60_000),
 
     // The attestation-conveyance preference sent in creation options. Anything
     // stricter than 'ignore' below needs 'direct' here, or authenticators are
@@ -87,7 +87,7 @@ return [
     */
     'challenge' => [
         'store' => env('PASSKEYS_CHALLENGE_STORE'),
-        'ttl' => (int) env('PASSKEYS_CHALLENGE_TTL', 60),
+        'ttl' => env('PASSKEYS_CHALLENGE_TTL', 60),
         'bytes' => 32,
     ],
 
@@ -161,7 +161,7 @@ return [
     // certificate's validity window. 0–3600; anything else fails at boot.
     // Note: an authenticator whose batch certificate has lapsed can no longer
     // enrol under 'self'/'basic'. That is deliberate.
-    'attestation_clock_skew' => (int) env('PASSKEYS_ATTESTATION_CLOCK_SKEW', 60),
+    'attestation_clock_skew' => env('PASSKEYS_ATTESTATION_CLOCK_SKEW', 60),
 
     /*
     |--------------------------------------------------------------------------

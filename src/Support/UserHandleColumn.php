@@ -16,8 +16,6 @@ final class UserHandleColumn
 
     public static function name(): string
     {
-        $column = config('passkeys.user.handle_column');
-
-        return is_string($column) && $column !== '' ? $column : self::DEFAULT;
+        return StrictConfig::string('user.handle_column', config('passkeys.user.handle_column'), self::DEFAULT);
     }
 }

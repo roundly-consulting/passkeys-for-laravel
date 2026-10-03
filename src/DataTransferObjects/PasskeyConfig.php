@@ -6,6 +6,7 @@ namespace RoundlyConsulting\Passkeys\DataTransferObjects;
 
 use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
 use RoundlyConsulting\PackageToolkit\Support\Config;
+use RoundlyConsulting\PackageToolkit\Support\ConfigValidator;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\AttestationTrust;
 use RoundlyConsulting\Passkeys\Enums\ResidentKey;
@@ -78,36 +79,28 @@ final readonly class PasskeyConfig
     ) {}
 
     /**
+     * Every value is read strictly: an absent (null) key takes its default, but a present
+     * value of the wrong shape throws {@see InvalidConfiguration} naming the key — a typo'd
+     * enum, a `'five'` timeout, a non-string origin or a non-list allow-list never silently
+     * becomes the default (or, for an allow-list, "allow anything").
+     *
      * @param  array<string, mixed>  $config
+     *
+     * @throws InvalidConfiguration
      */
     public static function fromArray(array $config, ?string $appUrl = null): self
     {
-        $rp = is_array($config['rp'] ?? null) ? $config['rp'] : [];
-        $challenge = is_array($config['challenge'] ?? null) ? $config['challenge'] : [];
-        $user = is_array($config['user'] ?? null) ? $config['user'] : [];
+        $read = Config::for(['passkeys' => $config], InvalidConfiguration::class);
 
-        $rpId = is_string($rp['id'] ?? null) && $rp['id'] !== '' ? $rp['id'] : self::hostFromUrl($appUrl);
+        $rpId = self::optionalString('rp.id', $config['rp']['id'] ?? null) ?? self::hostFromUrl($appUrl);
 
-        /** @var list<string> $origins */
-        $origins = array_values(array_filter(
-            is_array($config['origins'] ?? null) ? $config['origins'] : [],
-            static fn (mixed $origin): bool => is_string($origin) && $origin !== '',
-        ));
-
-        /** @var list<int> $algorithms */
-        $algorithms = array_values(array_filter(
-            is_array($config['algorithms'] ?? null) ? $config['algorithms'] : [],
-            'is_int',
-        ));
-
-        if ($algorithms === []) {
-            $algorithms = [CoseAlgorithm::ES256->value, CoseAlgorithm::RS256->value];
-        }
+        $origins = self::stringList('origins', $config['origins'] ?? null);
+        $algorithms = self::algorithms($config['algorithms'] ?? null);
 
         self::assertSupportedAlgorithms($algorithms);
 
-        $attestationTrust = AttestationTrust::from(is_string($config['attestation_trust'] ?? null) ? $config['attestation_trust'] : 'ignore');
-        $attestation = AttestationConveyance::from(is_string($config['attestation'] ?? null) ? $config['attestation'] : 'none');
+        $attestationTrust = $read->enum('passkeys.attestation_trust', AttestationTrust::class, AttestationTrust::Ignore);
+        $attestation = $read->enum('passkeys.attestation', AttestationConveyance::class, AttestationConveyance::None);
 
         // Demanding proof while telling authenticators not to attest would refuse
         // every registration, at ceremony time, for a reason the host cannot see.
@@ -116,33 +109,30 @@ final readonly class PasskeyConfig
             throw InvalidConfiguration::attestationConveyanceMismatch($attestationTrust->value);
         }
 
-        $anchors = is_array($config['attestation_anchors'] ?? null) ? $config['attestation_anchors'] : [];
-        $aaguids = is_array($config['aaguids'] ?? null) ? $config['aaguids'] : [];
-
         return new self(
             rpId: $rpId,
-            rpName: is_string($rp['name'] ?? null) ? $rp['name'] : 'Laravel',
+            rpName: self::string('rp.name', $config['rp']['name'] ?? null, 'Laravel'),
             origins: $origins,
-            allowCrossOrigin: Config::for($config, InvalidConfiguration::class)->boolean('allow_cross_origin'),
+            allowCrossOrigin: $read->boolean('passkeys.allow_cross_origin'),
             algorithms: $algorithms,
-            timeoutMs: (int) ($config['timeout_ms'] ?? 60_000),
+            timeoutMs: $read->integer('passkeys.timeout_ms', 60_000, min: 1),
             attestation: $attestation,
-            userVerification: UserVerification::from(is_string($config['user_verification'] ?? null) ? $config['user_verification'] : 'required'),
-            residentKey: ResidentKey::from(is_string($config['resident_key'] ?? null) ? $config['resident_key'] : 'required'),
-            challengeStore: is_string($challenge['store'] ?? null) && $challenge['store'] !== '' ? $challenge['store'] : null,
-            challengeTtl: (int) ($challenge['ttl'] ?? 60),
-            challengeBytes: (int) ($challenge['bytes'] ?? 32),
-            signCountPolicy: SignCountPolicy::from(is_string($config['sign_count_policy'] ?? null) ? $config['sign_count_policy'] : 'flag'),
+            userVerification: $read->enum('passkeys.user_verification', UserVerification::class, UserVerification::Required),
+            residentKey: $read->enum('passkeys.resident_key', ResidentKey::class, ResidentKey::Required),
+            challengeStore: self::optionalString('challenge.store', $config['challenge']['store'] ?? null),
+            challengeTtl: $read->integer('passkeys.challenge.ttl', 60, min: 1),
+            challengeBytes: $read->integer('passkeys.challenge.bytes', 32, min: 16),
+            signCountPolicy: $read->enum('passkeys.sign_count_policy', SignCountPolicy::class, SignCountPolicy::Flag),
             attestationTrust: $attestationTrust,
-            rejectUnknownFmt: Config::for($config, InvalidConfiguration::class)->boolean('reject_unknown_fmt'),
-            attestationAnchorDefaults: Config::for($anchors, InvalidConfiguration::class)->boolean('defaults', true),
-            attestationAnchorPaths: self::anchorPaths($anchors['paths'] ?? null),
-            attestationClockSkew: self::clockSkew($config['attestation_clock_skew'] ?? 60),
-            allowedAaguids: self::aaguids($aaguids['allowed'] ?? null),
-            userHandleColumn: is_string($user['handle_column'] ?? null) ? $user['handle_column'] : 'passkey_user_handle',
-            userHandleBytes: (int) ($user['handle_bytes'] ?? 32),
-            userNameAttribute: is_string($user['name_attribute'] ?? null) ? $user['name_attribute'] : 'email',
-            userDisplayNameAttribute: is_string($user['display_name_attribute'] ?? null) ? $user['display_name_attribute'] : 'name',
+            rejectUnknownFmt: $read->boolean('passkeys.reject_unknown_fmt'),
+            attestationAnchorDefaults: $read->boolean('passkeys.attestation_anchors.defaults', true),
+            attestationAnchorPaths: self::anchorPaths($config['attestation_anchors']['paths'] ?? null),
+            attestationClockSkew: self::clockSkew($read),
+            allowedAaguids: array_map(strtolower(...), self::stringList('aaguids.allowed', $config['aaguids']['allowed'] ?? null)),
+            userHandleColumn: self::string('user.handle_column', $config['user']['handle_column'] ?? null, 'passkey_user_handle'),
+            userHandleBytes: $read->integer('passkeys.user.handle_bytes', 32, min: 16, max: 64),
+            userNameAttribute: self::string('user.name_attribute', $config['user']['name_attribute'] ?? null, 'email'),
+            userDisplayNameAttribute: self::string('user.display_name_attribute', $config['user']['display_name_attribute'] ?? null, 'name'),
         );
     }
 
@@ -194,29 +184,32 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * Host-supplied trust anchors, normalised to `format => list<path>`. A
-     * non-string path or a non-list value is dropped rather than half-read.
+     * Host-supplied trust anchors, normalised to `format => list<path>`. A non-list
+     * value, a non-string format or a blank/non-string path throws rather than being
+     * dropped — a silently skipped anchor is a trust root the host thinks it set.
      *
      * @return array<string, list<string>>
+     *
+     * @throws InvalidConfiguration
      */
     private static function anchorPaths(mixed $paths): array
     {
-        if (! is_array($paths)) {
+        if ($paths === null) {
             return [];
+        }
+
+        if (! is_array($paths)) {
+            throw InvalidConfiguration::invalidValue('attestation_anchors.paths', 'a map of format => list of PEM paths', $paths);
         }
 
         $normalised = [];
 
         foreach ($paths as $format => $configured) {
-            if (! is_string($format) || ! is_array($configured)) {
-                continue;
+            if (! is_string($format)) {
+                throw InvalidConfiguration::invalidValue('attestation_anchors.paths', 'keyed by attestation format', $format);
             }
 
-            /** @var list<string> $files */
-            $files = array_values(array_filter(
-                $configured,
-                static fn (mixed $path): bool => is_string($path) && $path !== '',
-            ));
+            $files = self::stringList("attestation_anchors.paths.{$format}", $configured ?? []);
 
             if ($files !== []) {
                 $normalised[$format] = $files;
@@ -229,16 +222,9 @@ final readonly class PasskeyConfig
     /**
      * @throws InvalidConfiguration
      */
-    private static function clockSkew(mixed $value): int
+    private static function clockSkew(ConfigValidator $read): int
     {
-        if (! is_numeric($value)) {
-            throw InvalidConfiguration::invalidClockSkew(
-                is_scalar($value) ? (string) $value : gettype($value),
-                self::MAX_ATTESTATION_CLOCK_SKEW,
-            );
-        }
-
-        $seconds = (int) $value;
+        $seconds = $read->integer('passkeys.attestation_clock_skew', 60);
 
         if ($seconds < 0 || $seconds > self::MAX_ATTESTATION_CLOCK_SKEW) {
             throw InvalidConfiguration::invalidClockSkew((string) $seconds, self::MAX_ATTESTATION_CLOCK_SKEW);
@@ -248,24 +234,99 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * @return list<string>
+     * The configured COSE algorithms: absent → ES256 + RS256. Each entry must be an
+     * int (or a canonical integer string); an empty list or any other entry throws
+     * rather than being dropped — dropping `'-8'` would quietly offer ES256/RS256.
+     *
+     * @return list<int>
+     *
+     * @throws InvalidConfiguration
      */
-    private static function aaguids(mixed $allowed): array
+    private static function algorithms(mixed $configured): array
     {
-        if (! is_array($allowed)) {
+        if ($configured === null) {
+            return [CoseAlgorithm::ES256->value, CoseAlgorithm::RS256->value];
+        }
+
+        if (! is_array($configured) || $configured === []) {
+            throw InvalidConfiguration::invalidValue('algorithms', 'a non-empty list of COSE algorithm identifiers', $configured);
+        }
+
+        $algorithms = [];
+
+        foreach ($configured as $index => $algorithm) {
+            $algorithms[] = Config::for(['passkeys.algorithms.'.$index => $algorithm], InvalidConfiguration::class)
+                ->integer('passkeys.algorithms.'.$index, 0);
+        }
+
+        return $algorithms;
+    }
+
+    /**
+     * A list of non-blank strings; `[]` when absent. A non-list, or any entry that is
+     * not a non-blank string, throws — an allow-list must never silently shrink to
+     * "allow anything".
+     *
+     * @return list<string>
+     *
+     * @throws InvalidConfiguration
+     */
+    private static function stringList(string $key, mixed $value): array
+    {
+        if ($value === null) {
             return [];
         }
 
-        /** @var list<string> $aaguids */
-        $aaguids = array_values(array_map(
-            'strtolower',
-            array_filter(
-                $allowed,
-                static fn (mixed $aaguid): bool => is_string($aaguid) && $aaguid !== '',
-            ),
-        ));
+        if (! is_array($value)) {
+            throw InvalidConfiguration::invalidValue($key, 'a list of strings', $value);
+        }
 
-        return $aaguids;
+        $strings = [];
+
+        foreach ($value as $item) {
+            if (! is_string($item) || trim($item) === '') {
+                throw InvalidConfiguration::invalidValue($key, 'a list of non-empty strings', $item);
+            }
+
+            $strings[] = $item;
+        }
+
+        return $strings;
+    }
+
+    /**
+     * An optional string: null when absent or blank (an empty env value); a value that
+     * is not a string throws.
+     *
+     * @throws InvalidConfiguration
+     */
+    private static function optionalString(string $key, mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_string($value)) {
+            throw InvalidConfiguration::invalidValue($key, 'a string or null', $value);
+        }
+
+        return trim($value) === '' ? null : $value;
+    }
+
+    /**
+     * A required string: `$default` only when absent; blank or non-string throws.
+     *
+     * @throws InvalidConfiguration
+     */
+    private static function string(string $key, mixed $value, string $default): string
+    {
+        $value ??= $default;
+
+        if (! is_string($value) || trim($value) === '') {
+            throw InvalidConfiguration::invalidValue($key, 'a non-empty string', $value);
+        }
+
+        return $value;
     }
 
     /**

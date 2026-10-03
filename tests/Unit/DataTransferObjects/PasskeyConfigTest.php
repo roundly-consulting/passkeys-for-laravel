@@ -14,9 +14,9 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 it('reads a fully-specified config into typed values', function (): void {
     $config = PasskeyConfig::fromArray([
         'rp' => ['id' => 'example.com', 'name' => 'Example'],
-        'origins' => ['https://example.com', '', 5, 'https://www.example.com'],
+        'origins' => ['https://example.com', 'https://www.example.com'],
         'allow_cross_origin' => true,
-        'algorithms' => [-7, 'x', -257],
+        'algorithms' => [-7, '-257'],
         'timeout_ms' => 30_000,
         'attestation' => 'direct',
         'user_verification' => 'preferred',
@@ -139,10 +139,99 @@ it('trusts the shipped anchors by default and can be told not to', function (): 
 
 it('normalises the aaguid allow-list to lowercase', function (): void {
     $config = PasskeyConfig::fromArray([
-        'aaguids' => ['allowed' => ['ABCDEF01-1111-1111-1111-111111111111', '', 42]],
+        'aaguids' => ['allowed' => ['ABCDEF01-1111-1111-1111-111111111111']],
     ]);
 
     expect($config->allowedAaguids)->toBe(['abcdef01-1111-1111-1111-111111111111'])
-        ->and(PasskeyConfig::fromArray([])->allowedAaguids)->toBe([])
-        ->and(PasskeyConfig::fromArray(['aaguids' => ['allowed' => 'nope']])->allowedAaguids)->toBe([]);
+        ->and(PasskeyConfig::fromArray([])->allowedAaguids)->toBe([]);
+});
+
+it('refuses a mistyped allow-list instead of reading it as allow-anything (strict config)', function (string $list, mixed $value): void {
+    $config = $list === 'origins' ? ['origins' => $value] : ['aaguids' => ['allowed' => $value]];
+
+    expect(fn (): PasskeyConfig => PasskeyConfig::fromArray($config))
+        ->toThrow(InvalidConfiguration::class, "passkeys.{$list}");
+})->with([
+    'aaguids not a list' => ['aaguids.allowed', 'nope'],
+    'aaguids non-string entry' => ['aaguids.allowed', ['ABCDEF01-1111-1111-1111-111111111111', 42]],
+    'aaguids blank entry' => ['aaguids.allowed', ['']],
+    'origins not a list' => ['origins', 'https://example.com'],
+    'origins non-string entry' => ['origins', ['https://example.com', 5]],
+    'origins blank entry' => ['origins', ['https://example.com', '']],
+]);
+
+it('refuses a junk algorithm list instead of offering the defaults (strict config)', function (mixed $algorithms): void {
+    PasskeyConfig::fromArray(['algorithms' => $algorithms]);
+})->with([
+    'word entry' => [[-7, 'x']],
+    'float string entry' => [['-7.0']],
+    'empty list' => [[]],
+    'not a list' => ['-7'],
+])->throws(InvalidConfiguration::class, 'passkeys.algorithms');
+
+it('refuses a typo in an enum setting instead of a ValueError or the default (strict config)', function (string $key, string $typo): void {
+    expect(fn (): PasskeyConfig => PasskeyConfig::fromArray([$key => $typo]))
+        ->toThrow(InvalidConfiguration::class, "passkeys.{$key}");
+})->with([
+    'attestation' => ['attestation', 'Direct'],
+    'attestation_trust' => ['attestation_trust', 'basik'],
+    'user_verification' => ['user_verification', 'required '],
+    'resident_key' => ['resident_key', 'yes'],
+    'sign_count_policy' => ['sign_count_policy', 'warn'],
+]);
+
+it('refuses a non-string enum setting instead of the default (strict config)', function (): void {
+    PasskeyConfig::fromArray(['user_verification' => true]);
+})->throws(InvalidConfiguration::class, 'passkeys.user_verification');
+
+it('refuses a junk or out-of-range integer instead of reading it as 0 (strict config)', function (array $config, string $key): void {
+    expect(fn (): PasskeyConfig => PasskeyConfig::fromArray($config))
+        ->toThrow(InvalidConfiguration::class, "passkeys.{$key}");
+})->with([
+    'timeout word' => [['timeout_ms' => 'five'], 'timeout_ms'],
+    'timeout zero' => [['timeout_ms' => 0], 'timeout_ms'],
+    'challenge ttl float string' => [['challenge' => ['ttl' => '1.5']], 'challenge.ttl'],
+    'challenge ttl zero' => [['challenge' => ['ttl' => '0']], 'challenge.ttl'],
+    'challenge bytes under 16' => [['challenge' => ['bytes' => 8]], 'challenge.bytes'],
+    'handle bytes over 64' => [['user' => ['handle_bytes' => 65]], 'user.handle_bytes'],
+    'handle bytes under 16' => [['user' => ['handle_bytes' => 8]], 'user.handle_bytes'],
+    'clock skew exponent' => [['attestation_clock_skew' => '1e3'], 'attestation_clock_skew'],
+    'clock skew float string' => [['attestation_clock_skew' => '1.5'], 'attestation_clock_skew'],
+]);
+
+it('reads canonical integer strings from env (strict config)', function (): void {
+    $config = PasskeyConfig::fromArray([
+        'timeout_ms' => '30000',
+        'challenge' => ['ttl' => ' 90 '],
+        'attestation_clock_skew' => '0',
+    ]);
+
+    expect($config->timeoutMs)->toBe(30_000)
+        ->and($config->challengeTtl)->toBe(90)
+        ->and($config->attestationClockSkew)->toBe(0);
+});
+
+it('refuses a blank or non-string string setting instead of the default (strict config)', function (array $config, string $key): void {
+    expect(fn (): PasskeyConfig => PasskeyConfig::fromArray($config))
+        ->toThrow(InvalidConfiguration::class, "passkeys.{$key}");
+})->with([
+    'rp id not a string' => [['rp' => ['id' => 42]], 'rp.id'],
+    'rp name blank' => [['rp' => ['name' => '']], 'rp.name'],
+    'challenge store not a string' => [['challenge' => ['store' => ['redis']]], 'challenge.store'],
+    'handle column blank' => [['user' => ['handle_column' => ' ']], 'user.handle_column'],
+    'name attribute not a string' => [['user' => ['name_attribute' => false]], 'user.name_attribute'],
+]);
+
+it('hands raw env integers to the strict reader through the shipped config (strict config)', function (): void {
+    $_SERVER['PASSKEYS_TIMEOUT_MS'] = 'five';
+
+    try {
+        /** @var array<string, mixed> $shipped */
+        $shipped = require __DIR__.'/../../../config/passkeys.php';
+    } finally {
+        unset($_SERVER['PASSKEYS_TIMEOUT_MS']);
+    }
+
+    expect($shipped['timeout_ms'])->toBe('five')
+        ->and(fn (): PasskeyConfig => PasskeyConfig::fromArray($shipped))->toThrow(InvalidConfiguration::class, 'passkeys.timeout_ms');
 });
