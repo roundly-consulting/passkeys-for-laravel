@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Passkeys\Tests\Fixtures\PublishSandboxTestCase;
 use RoundlyConsulting\Passkeys\Tests\Fixtures\SwappedPasskeyTestCase;
 use RoundlyConsulting\Passkeys\Tests\TestCase;
 
@@ -19,3 +20,9 @@ uses(TestCase::class)->in(__DIR__.'/ArchTest.php', 'Feature', 'Unit');
  * case per directory, not per file.
  */
 uses(SwappedPasskeyTestCase::class)->in(__DIR__.'/ModelSwap');
+
+/**
+ * Publishing writes files: into a throwaway database/ set before boot, never the testbench
+ * skeleton whose `database/migrations` every parallel process migrates.
+ */
+uses(PublishSandboxTestCase::class)->in(__DIR__.'/Publish');

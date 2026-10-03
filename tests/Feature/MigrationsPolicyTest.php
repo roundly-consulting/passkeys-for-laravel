@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Migrations are PUBLISH-ONLY (fleet policy): the package never loads them, the host
- * publishes them and then runs `php artisan migrate`.
+ * publishes them and then runs `php artisan migrate`. The publish itself is proven in
+ * `tests/Publish/PublishMigrationsTest.php`, against a sandboxed database/.
  */
 it('never auto-loads its migrations', function (): void {
     $packaged = realpath(__DIR__.'/../../database/migrations');
@@ -19,26 +18,6 @@ it('never auto-loads its migrations', function (): void {
     );
 
     expect($loaded)->not->toContain($packaged);
-});
-
-it('publishes each migration into the host timestamped', function (): void {
-    $sources = glob(__DIR__.'/../../database/migrations/*.php') ?: [];
-
-    expect($sources)->toHaveCount(2);
-
-    Artisan::call('vendor:publish', ['--tag' => 'passkeys-migrations', '--force' => true]);
-
-    $create = File::glob(database_path('migrations/*_create_passkeys_table.php'));
-    $alter = File::glob(database_path('migrations/*_add_attestation_type_to_passkeys_table.php'));
-
-    expect($create)->toHaveCount(1)
-        ->and($alter)->toHaveCount(1)
-        ->and(basename((string) $create[0]))->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_create_passkeys_table\.php$/')
-        ->and(basename((string) $alter[0]))->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_add_attestation_type_to_passkeys_table\.php$/')
-        // The ALTER must sort AFTER the CREATE once published, or a fresh host cannot migrate.
-        ->and(basename((string) $alter[0]))->toBeGreaterThan(basename((string) $create[0]));
-
-    File::delete([...$create, ...$alter]);
 });
 
 /**
