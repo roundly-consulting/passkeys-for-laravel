@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 
 /**
  * Regression (env-boolean sweep): the three switches were read with `(bool) env(...)` in the
@@ -54,17 +55,17 @@ it('reads attestation_anchors.defaults from an env string', function (string $va
         ->and(passkeysAboutRow('trust_anchors'))->toStartWith('bundled roots '.($on ? 'ON' : 'OFF'));
 })->with('passkeys env switches');
 
-it('falls back to each switch default for an unrecognised value', function (): void {
-    $config = PasskeyConfig::fromArray([
-        'allow_cross_origin' => 'maybe',
-        'reject_unknown_fmt' => 'maybe',
-        'attestation_anchors' => ['defaults' => 'maybe'],
-    ]);
-
-    expect($config->allowCrossOrigin)->toBeFalse()
-        ->and($config->rejectUnknownFmt)->toBeFalse()
-        ->and($config->attestationAnchorDefaults)->toBeTrue();
-});
+it('refuses an unrecognised switch value instead of reading the default', function (array $config, string $key): void {
+    // `PASSKEYS_ALLOW_CROSS_ORIGIN=maybe` must stop the app, not quietly pick a default.
+    expect(fn (): PasskeyConfig => PasskeyConfig::fromArray($config))->toThrow(
+        InvalidConfiguration::class,
+        "Configuration value [{$key}] must be a boolean (true/false, 1/0, on/off or yes/no), [maybe] given.",
+    );
+})->with([
+    'allow_cross_origin' => [['allow_cross_origin' => 'maybe'], 'allow_cross_origin'],
+    'reject_unknown_fmt' => [['reject_unknown_fmt' => 'maybe'], 'reject_unknown_fmt'],
+    'attestation_anchors.defaults' => [['attestation_anchors' => ['defaults' => 'maybe']], 'defaults'],
+]);
 
 /**
  * End to end through the shipped config file: a `(bool) env(...)` cast there turns "off"
