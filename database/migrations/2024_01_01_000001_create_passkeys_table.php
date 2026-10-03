@@ -16,8 +16,8 @@ return new class extends Migration
         // table its model will never look at.
         $name = config('passkeys.table');
 
-        // Silently falls back to bigint for an unrecognized value, so a typo in
-        // the host's config never leaves the package unable to migrate.
+        // Absent reads as bigint; an unrecognized value throws, so a typo in the
+        // host's config never builds the wrong morph key type.
         $keyType = KeyType::fromConfig('passkeys.key_type');
 
         Schema::create(is_string($name) ? $name : 'passkeys', function (Blueprint $table) use ($keyType): void {

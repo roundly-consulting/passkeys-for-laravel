@@ -207,8 +207,9 @@ return [
     |
     | The key type used for the polymorphic "authenticatable" column. Use "uuid"
     | or "ulid" when the models that own passkeys (typically your User) use
-    | UUID/ULID primary keys, otherwise leave it as "bigint". Anything
-    | unrecognized falls back to "bigint". Your authenticatable models must share
+    | UUID/ULID primary keys, otherwise leave it as "bigint" (also the default
+    | when unset). Any other value throws InvalidConfigurationException rather
+    | than silently building bigint keys. Your authenticatable models must share
     | one key type.
     |
     | Supported: "bigint", "uuid", "ulid"

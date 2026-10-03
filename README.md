@@ -112,11 +112,12 @@ at boot, not at the first registration.
 | `user.handle_bytes` | — | `32` | Length of the generated opaque user handle, in bytes. |
 | `model` | — | `Passkey::class` | The credential model. Point it at a subclass of `Passkey` to add behaviour; every ceremony resolves it. |
 | `table` | — | `passkeys` | The credential table. Publish the config **before** migrating if you rename it — the migration reads this key. |
-| `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (anything else falls back to `bigint`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
+| `key_type` | `PASSKEYS_KEY_TYPE` | `bigint` | Key type of the `authenticatable` morph column: `bigint`, `uuid` or `ulid` (case-insensitive; unset reads as `bigint`, anything else throws `InvalidConfigurationException`). Match the primary keys of the models that own passkeys (they must share one type), and set it **before** migrating — the migration reads this key. |
 
 The three switches (`allow_cross_origin`, `reject_unknown_fmt`, `attestation_anchors.defaults`)
-accept the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`; anything
-unrecognised falls back to the default shown.
+accept the usual env spellings — `true`/`false`, `1`/`0`, `on`/`off`, `yes`/`no`. Unset or `null`
+reads as the default shown; anything else (a typo such as `disabled`) throws `InvalidConfiguration`
+naming the key instead of quietly reading as the default.
 
 ## Using your own credential model
 
