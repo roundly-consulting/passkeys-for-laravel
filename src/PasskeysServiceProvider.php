@@ -26,6 +26,7 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 use RoundlyConsulting\Passkeys\Repositories\CacheChallengeRepository;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
+use RoundlyConsulting\Passkeys\Support\StrictConfig;
 use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
 
 final class PasskeysServiceProvider extends PackageServiceProvider
@@ -113,10 +114,12 @@ final class PasskeysServiceProvider extends PackageServiceProvider
     {
         $config = config('passkeys');
         $appUrl = config('app.url');
+        $appName = config('app.name');
 
         return PasskeyConfig::fromArray(
             is_array($config) ? $config : [],
             is_string($appUrl) ? $appUrl : null,
+            is_string($appName) ? $appName : null,
         );
     }
 
@@ -165,7 +168,7 @@ final class PasskeysServiceProvider extends PackageServiceProvider
             'Ceremony timeout' => $this->intOr('passkeys.timeout_ms', 60_000).'ms',
             'Challenge' => $this->intOr('passkeys.challenge.bytes', 32).' bytes, TTL '
                 .$this->intOr('passkeys.challenge.ttl', 60).'s, store '
-                .(is_string(config('passkeys.challenge.store')) ? 'CUSTOM' : 'DEFAULT'),
+                .(StrictConfig::notSet(config('passkeys.challenge.store')) ? 'DEFAULT' : 'CUSTOM'),
             'Attestation' => 'conveyance '.$this->stringOr('passkeys.attestation', 'none')
                 .', trust '.$this->stringOr('passkeys.attestation_trust', 'ignore')
                 .', unknown formats '.(Config::boolean('passkeys.reject_unknown_fmt') ? 'REJECTED' : 'ACCEPTED'),
@@ -181,14 +184,14 @@ final class PasskeysServiceProvider extends PackageServiceProvider
 
     private function presence(mixed $value): string
     {
-        return is_string($value) && $value !== '' ? 'SET' : 'MISSING';
+        return is_string($value) && ! StrictConfig::notSet($value) ? 'SET' : 'MISSING';
     }
 
     private function stringOr(string $key, string $default): string
     {
         $value = config($key);
 
-        return is_string($value) && $value !== '' ? $value : $default;
+        return is_string($value) && ! StrictConfig::notSet($value) ? $value : $default;
     }
 
     private function intOr(string $key, int $default): int

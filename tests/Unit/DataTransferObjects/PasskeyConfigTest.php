@@ -211,16 +211,49 @@ it('reads canonical integer strings from env (strict config)', function (): void
         ->and($config->attestationClockSkew)->toBe(0);
 });
 
-it('refuses a blank or non-string string setting instead of the default (strict config)', function (array $config, string $key): void {
+it('refuses a non-string string setting instead of the default (strict config)', function (array $config, string $key): void {
     expect(fn (): PasskeyConfig => PasskeyConfig::fromArray($config))
         ->toThrow(InvalidConfiguration::class, "passkeys.{$key}");
 })->with([
     'rp id not a string' => [['rp' => ['id' => 42]], 'rp.id'],
-    'rp name blank' => [['rp' => ['name' => '']], 'rp.name'],
+    'rp name not a string' => [['rp' => ['name' => ['Acme']]], 'rp.name'],
     'challenge store not a string' => [['challenge' => ['store' => ['redis']]], 'challenge.store'],
-    'handle column blank' => [['user' => ['handle_column' => ' ']], 'user.handle_column'],
+    'handle column not a string' => [['user' => ['handle_column' => 7]], 'user.handle_column'],
     'name attribute not a string' => [['user' => ['name_attribute' => false]], 'user.name_attribute'],
 ]);
+
+it('reads a blank setting as not set, so its default applies (strict config)', function (string $blank): void {
+    $config = PasskeyConfig::fromArray([
+        'rp' => ['name' => $blank],
+        'origins' => $blank,
+        'algorithms' => $blank,
+        'allow_cross_origin' => $blank,
+        'timeout_ms' => $blank,
+        'attestation' => $blank,
+        'user_verification' => $blank,
+        'resident_key' => $blank,
+        'challenge' => ['store' => $blank, 'ttl' => $blank, 'bytes' => $blank],
+        'sign_count_policy' => $blank,
+        'attestation_trust' => $blank,
+        'reject_unknown_fmt' => $blank,
+        'attestation_anchors' => ['defaults' => $blank, 'paths' => $blank],
+        'attestation_clock_skew' => $blank,
+        'aaguids' => ['allowed' => $blank],
+        'user' => ['handle_column' => $blank, 'handle_bytes' => $blank, 'name_attribute' => $blank, 'display_name_attribute' => $blank],
+    ]);
+    $defaults = PasskeyConfig::fromArray([]);
+
+    expect($config)->toEqual($defaults)
+        ->and($config->rpName)->toBe('Laravel')
+        ->and($config->attestationAnchorDefaults)->toBeTrue()
+        ->and($config->userHandleColumn)->toBe('passkey_user_handle');
+})->with(['empty' => [''], 'whitespace' => ['  ']]);
+
+it('reads a blank relying-party name as the app name (strict config)', function (): void {
+    expect(PasskeyConfig::fromArray(['rp' => ['name' => '']], appName: 'Acme')->rpName)->toBe('Acme')
+        ->and(PasskeyConfig::fromArray([], appName: ' ')->rpName)->toBe('Laravel')
+        ->and(PasskeyConfig::fromArray(['rp' => ['name' => 'Shop']], appName: 'Acme')->rpName)->toBe('Shop');
+});
 
 it('hands raw env integers to the strict reader through the shipped config (strict config)', function (): void {
     $_SERVER['PASSKEYS_TIMEOUT_MS'] = 'five';

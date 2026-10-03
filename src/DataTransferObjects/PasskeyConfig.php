@@ -13,6 +13,7 @@ use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\SignCountPolicy;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
+use RoundlyConsulting\Passkeys\Support\StrictConfig;
 
 /**
  * A typed, validated view over `config/passkeys.php`, also parsed by the
@@ -79,8 +80,9 @@ final readonly class PasskeyConfig
     ) {}
 
     /**
-     * Every value is read strictly: an absent (null) key takes its default, but a present
-     * value of the wrong shape throws {@see InvalidConfiguration} naming the key — a typo'd
+     * Every value is read strictly: a key that is not set — absent, null or blank (`''` or
+     * whitespace, what a host's `KEY=` gives) — takes its default, but a present value of
+     * the wrong shape throws {@see InvalidConfiguration} naming the key — a typo'd
      * enum, a `'five'` timeout, a non-string origin or a non-list allow-list never silently
      * becomes the default (or, for an allow-list, "allow anything").
      *
@@ -88,7 +90,7 @@ final readonly class PasskeyConfig
      *
      * @throws InvalidConfiguration
      */
-    public static function fromArray(array $config, ?string $appUrl = null): self
+    public static function fromArray(array $config, ?string $appUrl = null, ?string $appName = null): self
     {
         $read = Config::for(['passkeys' => $config], InvalidConfiguration::class);
 
@@ -111,7 +113,8 @@ final readonly class PasskeyConfig
 
         return new self(
             rpId: $rpId,
-            rpName: self::string('rp.name', $config['rp']['name'] ?? null, 'Laravel'),
+            // Not set → the app name, as the shipped `env('PASSKEYS_RP_NAME', env('APP_NAME'))` reads.
+            rpName: self::string('rp.name', $config['rp']['name'] ?? null, StrictConfig::notSet($appName) ? 'Laravel' : (string) $appName),
             origins: $origins,
             allowCrossOrigin: $read->boolean('passkeys.allow_cross_origin'),
             algorithms: $algorithms,
@@ -194,7 +197,7 @@ final readonly class PasskeyConfig
      */
     private static function anchorPaths(mixed $paths): array
     {
-        if ($paths === null) {
+        if (StrictConfig::notSet($paths)) {
             return [];
         }
 
@@ -234,9 +237,10 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * The configured COSE algorithms: absent → ES256 + RS256. Each entry must be an
-     * int (or a canonical integer string); an empty list or any other entry throws
-     * rather than being dropped — dropping `'-8'` would quietly offer ES256/RS256.
+     * The configured COSE algorithms: not set (absent, null or blank) → ES256 + RS256.
+     * Each entry must be an int (or a canonical integer string); an empty list or any
+     * other entry throws rather than being dropped — dropping `'-8'` would quietly offer
+     * ES256/RS256.
      *
      * @return list<int>
      *
@@ -244,7 +248,7 @@ final readonly class PasskeyConfig
      */
     private static function algorithms(mixed $configured): array
     {
-        if ($configured === null) {
+        if (StrictConfig::notSet($configured)) {
             return [CoseAlgorithm::ES256->value, CoseAlgorithm::RS256->value];
         }
 
@@ -263,9 +267,9 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * A list of non-blank strings; `[]` when absent. A non-list, or any entry that is
-     * not a non-blank string, throws — an allow-list must never silently shrink to
-     * "allow anything".
+     * A list of non-blank strings; `[]` when not set (absent, null or blank). A non-list,
+     * or any entry that is not a non-blank string, throws — an allow-list must never
+     * silently shrink to "allow anything".
      *
      * @return list<string>
      *
@@ -273,7 +277,7 @@ final readonly class PasskeyConfig
      */
     private static function stringList(string $key, mixed $value): array
     {
-        if ($value === null) {
+        if (StrictConfig::notSet($value)) {
             return [];
         }
 
@@ -295,8 +299,8 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * An optional string: null when absent or blank (an empty env value); a value that
-     * is not a string throws.
+     * An optional string: null when not set — absent, null or blank (an empty env
+     * value); a value that is not a string throws.
      *
      * @throws InvalidConfiguration
      */
@@ -314,19 +318,14 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * A required string: `$default` only when absent; blank or non-string throws.
+     * A required string: `$default` when not set (absent, null or blank); a non-string
+     * throws.
      *
      * @throws InvalidConfiguration
      */
     private static function string(string $key, mixed $value, string $default): string
     {
-        $value ??= $default;
-
-        if (! is_string($value) || trim($value) === '') {
-            throw InvalidConfiguration::invalidValue($key, 'a non-empty string', $value);
-        }
-
-        return $value;
+        return StrictConfig::string($key, $value, $default);
     }
 
     /**
@@ -354,7 +353,7 @@ final readonly class PasskeyConfig
 
     private static function hostFromUrl(?string $url): ?string
     {
-        if ($url === null || $url === '') {
+        if (StrictConfig::notSet($url)) {
             return null;
         }
 

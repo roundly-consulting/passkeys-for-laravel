@@ -100,3 +100,20 @@ it('honours env-string switches through the shipped config file', function (stri
         ->and(passkeysAboutRow('attestation'))->toEndWith('unknown formats '.($on ? 'REJECTED' : 'ACCEPTED'))
         ->and(passkeysAboutRow('trust_anchors'))->toStartWith('bundled roots '.($on ? 'ON' : 'OFF'));
 })->with('passkeys env switches');
+
+it('reads a blank switch as not set, so its default applies in the DTO and about (strict config)', function (): void {
+    config()->set('passkeys.allow_cross_origin', '');
+    config()->set('passkeys.reject_unknown_fmt', ' ');
+    config()->set('passkeys.attestation_anchors.defaults', '');
+    config()->set('passkeys.challenge.store', '');
+
+    $config = PasskeyConfig::fromArray(['allow_cross_origin' => '', 'reject_unknown_fmt' => ' ', 'attestation_anchors' => ['defaults' => '']]);
+
+    expect($config->allowCrossOrigin)->toBeFalse()
+        ->and($config->rejectUnknownFmt)->toBeFalse()
+        ->and($config->attestationAnchorDefaults)->toBeTrue()
+        ->and(passkeysAboutRow('origins'))->toEndWith('cross-origin OFF')
+        ->and(passkeysAboutRow('attestation'))->toEndWith('unknown formats ACCEPTED')
+        ->and(passkeysAboutRow('trust_anchors'))->toStartWith('bundled roots ON')
+        ->and(passkeysAboutRow('challenge'))->toEndWith('store DEFAULT');
+});

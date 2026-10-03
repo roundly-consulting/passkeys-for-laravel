@@ -19,8 +19,9 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
 final class StrictConfig
 {
     /**
-     * A required string: `$default` only when absent (null); a blank or non-string value
-     * throws {@see InvalidConfiguration} instead of silently reading as the default.
+     * A required string: `$default` when not set — absent, null or blank (`''` or
+     * whitespace, what a host's `KEY=` gives); a non-string value throws
+     * {@see InvalidConfiguration} instead of silently reading as the default.
      *
      * @param  string  $key  the key under `passkeys.`, for the message
      *
@@ -28,17 +29,28 @@ final class StrictConfig
      */
     public static function string(string $key, mixed $value, string $default): string
     {
-        $value ??= $default;
+        if (self::notSet($value)) {
+            return $default;
+        }
 
-        if (! is_string($value) || trim($value) === '') {
-            throw InvalidConfiguration::invalidValue($key, 'a non-empty string', $value);
+        if (! is_string($value)) {
+            throw InvalidConfiguration::invalidValue($key, 'a string', $value);
         }
 
         return $value;
     }
 
     /**
-     * An int or a canonical integer string within the bounds; `$default` only when absent.
+     * Absent, null or blank (`''` or whitespace): the key is not set, so its default applies.
+     */
+    public static function notSet(mixed $value): bool
+    {
+        return $value === null || (is_string($value) && trim($value) === '');
+    }
+
+    /**
+     * An int or a canonical integer string within the bounds; `$default` when not set
+     * (absent, null or blank).
      *
      * @param  string  $key  the key under `passkeys.`, for the message
      *
