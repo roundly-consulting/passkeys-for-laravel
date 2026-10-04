@@ -54,12 +54,15 @@ final class InvalidConfiguration extends PasskeyException
     /**
      * A configured value of the wrong shape, named by its key under `passkeys.` — a
      * typo fails loudly instead of reading as the default.
+     *
+     * @param  string  $expected  a code under `errors.config_expectations` (worded in
+     *                            the app locale), or the caller's own wording, kept as is
      */
     public static function invalidValue(string $key, string $expected, mixed $given): self
     {
         return new self(self::trans('invalid_config_value', [
             'key' => $key,
-            'expected' => $expected,
+            'expected' => self::fragment('config_expectations', $expected),
             'given' => is_string($given) ? '"'.$given.'"' : get_debug_type($given),
         ]));
     }

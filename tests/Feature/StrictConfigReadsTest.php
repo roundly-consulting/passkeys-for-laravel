@@ -74,3 +74,11 @@ it('refuses a non-string user name attribute (strict config)', function (string 
     'name' => ['passkeys.user.name_attribute', 'passkeyUserName'],
     'display name' => ['passkeys.user.display_name_attribute', 'passkeyDisplayName'],
 ]);
+
+it('names the expected shape in the app locale (strict config)', function (): void {
+    config(['passkeys.table' => 1]);
+    app()->setLocale('sk');
+
+    expect(fn (): string => (new Passkey)->getTable())
+        ->toThrow(InvalidConfiguration::class, 'Nastavenie passkeys.table musí byť reťazec; nastavená hodnota je int.');
+});

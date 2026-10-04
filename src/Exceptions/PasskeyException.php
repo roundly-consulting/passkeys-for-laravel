@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Exceptions;
 
+use Illuminate\Support\Facades\Lang;
 use RuntimeException;
 
 /**
@@ -23,5 +24,23 @@ abstract class PasskeyException extends RuntimeException
         $line = __('passkeys::errors.'.$key, $replace);
 
         return is_string($line) ? $line : $key;
+    }
+
+    /**
+     * A message fragment the package owns (`errors.<group>.<code>`), in the app
+     * locale. Anything that is not one of those codes — a host's own verifier
+     * passing its own wording — is kept verbatim.
+     *
+     * @param  array<string, string>  $replace
+     */
+    protected static function fragment(string $group, string $code, array $replace = []): string
+    {
+        $key = $group.'.'.$code;
+
+        if (preg_match('/^[a-z][a-z0-9_]*$/', $code) !== 1 || ! Lang::has('passkeys::errors.'.$key)) {
+            return $code;
+        }
+
+        return self::trans($key, $replace);
     }
 }

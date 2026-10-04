@@ -32,7 +32,16 @@ return [
     // Attestation — configuration.
     'attestation_conveyance_mismatch' => 'passkeys.attestation_trust je „:trust“, ale passkeys.attestation je „none“, takže autentifikátory dostanú pokyn atestáciu neposielať a každá registrácia by bola odmietnutá. Nastavte passkeys.attestation na „direct“ (PASSKEYS_ATTESTATION=direct).',
     'attestation_invalid_clock_skew' => 'passkeys.attestation_clock_skew musí byť od 0 do :max sekúnd; nastavená hodnota je „:seconds“.',
-    'invalid_config_value' => 'passkeys.:key musí byť :expected; nastavená hodnota je :given.',
+    'invalid_config_value' => 'Nastavenie passkeys.:key musí byť :expected; nastavená hodnota je :given.',
+    'config_expectations' => [
+        'string' => 'reťazec',
+        'string_or_null' => 'reťazec alebo null',
+        'list_of_strings' => 'zoznam reťazcov',
+        'list_of_non_empty_strings' => 'zoznam neprázdnych reťazcov',
+        'algorithm_list' => 'neprázdny zoznam identifikátorov algoritmov COSE',
+        'anchor_map' => 'mapa v tvare formát => zoznam ciest k súborom PEM',
+        'keyed_by_format' => 'indexované názvami formátov atestácie',
+    ],
     'attestation_unreadable_anchor' => 'Kotva dôvery „:path“ nastavená v passkeys.attestation_anchors.paths.:format sa nedá prečítať alebo neobsahuje certifikát PEM.',
 
     // Attestation — the statement's maths failed.

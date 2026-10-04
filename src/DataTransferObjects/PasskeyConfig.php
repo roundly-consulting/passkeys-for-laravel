@@ -202,14 +202,14 @@ final readonly class PasskeyConfig
         }
 
         if (! is_array($paths)) {
-            throw InvalidConfiguration::invalidValue('attestation_anchors.paths', 'a map of format => list of PEM paths', $paths);
+            throw InvalidConfiguration::invalidValue('attestation_anchors.paths', 'anchor_map', $paths);
         }
 
         $normalised = [];
 
         foreach ($paths as $format => $configured) {
             if (! is_string($format)) {
-                throw InvalidConfiguration::invalidValue('attestation_anchors.paths', 'keyed by attestation format', $format);
+                throw InvalidConfiguration::invalidValue('attestation_anchors.paths', 'keyed_by_format', $format);
             }
 
             $files = self::stringList("attestation_anchors.paths.{$format}", $configured ?? []);
@@ -253,7 +253,7 @@ final readonly class PasskeyConfig
         }
 
         if (! is_array($configured) || $configured === []) {
-            throw InvalidConfiguration::invalidValue('algorithms', 'a non-empty list of COSE algorithm identifiers', $configured);
+            throw InvalidConfiguration::invalidValue('algorithms', 'algorithm_list', $configured);
         }
 
         $algorithms = [];
@@ -282,14 +282,14 @@ final readonly class PasskeyConfig
         }
 
         if (! is_array($value)) {
-            throw InvalidConfiguration::invalidValue($key, 'a list of strings', $value);
+            throw InvalidConfiguration::invalidValue($key, 'list_of_strings', $value);
         }
 
         $strings = [];
 
         foreach ($value as $item) {
             if (! is_string($item) || trim($item) === '') {
-                throw InvalidConfiguration::invalidValue($key, 'a list of non-empty strings', $item);
+                throw InvalidConfiguration::invalidValue($key, 'list_of_non_empty_strings', $item);
             }
 
             $strings[] = $item;
@@ -311,7 +311,7 @@ final readonly class PasskeyConfig
         }
 
         if (! is_string($value)) {
-            throw InvalidConfiguration::invalidValue($key, 'a string or null', $value);
+            throw InvalidConfiguration::invalidValue($key, 'string_or_null', $value);
         }
 
         return trim($value) === '' ? null : $value;

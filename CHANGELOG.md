@@ -6,6 +6,11 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+### Fixed
+
+- `InvalidConfiguration` messages for a mistyped `passkeys.*` setting now name the expected shape
+  (for example "a list of strings") in the app's language instead of always in English.
+
 ## 1.0.1 - 2026-10-04
 
 ### Changed

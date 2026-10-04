@@ -34,7 +34,7 @@ final class StrictConfig
         }
 
         if (! is_string($value)) {
-            throw InvalidConfiguration::invalidValue($key, 'a string', $value);
+            throw InvalidConfiguration::invalidValue($key, 'string', $value);
         }
 
         return $value;

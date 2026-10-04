@@ -268,3 +268,34 @@ it('hands raw env integers to the strict reader through the shipped config (stri
     expect($shipped['timeout_ms'])->toBe('five')
         ->and(fn (): PasskeyConfig => PasskeyConfig::fromArray($shipped))->toThrow(InvalidConfiguration::class, 'passkeys.timeout_ms');
 });
+
+/**
+ * @param  array<string, mixed>  $config
+ */
+function passkeyConfigFailure(array $config): string
+{
+    try {
+        PasskeyConfig::fromArray($config);
+    } catch (InvalidConfiguration $e) {
+        return $e->getMessage();
+    }
+
+    throw new RuntimeException('The configuration was accepted.');
+}
+
+it('names the expected shape in the app locale, never in English under sk', function (array $config, string $slovak, string $english): void {
+    app()->setLocale('sk');
+
+    expect(passkeyConfigFailure($config))->toContain($slovak)->not->toContain($english);
+
+    app()->setLocale('en');
+
+    expect(passkeyConfigFailure($config))->toContain($english);
+})->with([
+    'origins not a list' => [['origins' => 'https://example.com'], 'musí byť zoznam reťazcov;', 'a list of strings'],
+    'blank origin' => [['origins' => ['']], 'musí byť zoznam neprázdnych reťazcov;', 'a list of non-empty strings'],
+    'empty algorithms' => [['algorithms' => []], 'musí byť neprázdny zoznam identifikátorov algoritmov COSE;', 'a non-empty list of COSE algorithm identifiers'],
+    'anchor paths not a map' => [['attestation_anchors' => ['paths' => '/a.pem']], 'musí byť mapa v tvare formát => zoznam ciest k súborom PEM;', 'a map of format => list of PEM paths'],
+    'anchor paths not keyed by format' => [['attestation_anchors' => ['paths' => ['/a.pem']]], 'musí byť indexované názvami formátov atestácie;', 'keyed by attestation format'],
+    'challenge store not a string' => [['challenge' => ['store' => ['redis']]], 'musí byť reťazec alebo null;', 'a string or null'],
+]);

@@ -54,3 +54,46 @@ it('includes context in the parameterised factories', function (): void {
 it('is throwable and catchable as the package base type', function (): void {
     expect(fn () => throw RpIdMismatch::make())->toThrow(PasskeyException::class);
 });
+
+/**
+ * The package's own message fragments of one group, per language.
+ *
+ * @return array<string, string>
+ */
+function errorFragments(string $locale, string $group): array
+{
+    /** @var array<string, array<string, string>|string> $lines */
+    $lines = require __DIR__.'/../../../resources/lang/'.$locale.'/errors.php';
+
+    $fragments = $lines[$group];
+
+    expect($fragments)->toBeArray()->not->toBeEmpty();
+
+    /** @var array<string, string> $fragments */
+    return $fragments;
+}
+
+it('words every configuration expectation in the app locale', function (): void {
+    foreach (errorFragments('en', 'config_expectations') as $code => $english) {
+        $slovak = errorFragments('sk', 'config_expectations')[$code];
+
+        app()->setLocale('sk');
+
+        expect(InvalidConfiguration::invalidValue('origins', $code, 1)->getMessage())
+            ->toBe("Nastavenie passkeys.origins musí byť {$slovak}; nastavená hodnota je int.");
+
+        app()->setLocale('en');
+
+        expect(InvalidConfiguration::invalidValue('origins', $code, 1)->getMessage())
+            ->toBe("passkeys.origins must be {$english}; int was configured.");
+    }
+});
+
+it('keeps a caller\'s own expectation wording as is', function (string $expected): void {
+    expect(InvalidConfiguration::invalidValue('custom', $expected, 'x')->getMessage())
+        ->toBe("passkeys.custom must be {$expected}; \"x\" was configured.");
+})->with([
+    'prose' => ['a positive number'],
+    'a code of another group' => ['errors::string'],
+    'an unknown code' => ['positive_number'],
+]);
