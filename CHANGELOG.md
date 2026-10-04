@@ -6,6 +6,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+## 1.0.2 - 2026-10-04
+
 ### Fixed
 
 - `InvalidConfiguration` messages for a mistyped `passkeys.*` setting now name the expected shape
