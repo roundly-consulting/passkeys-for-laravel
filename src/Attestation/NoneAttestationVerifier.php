@@ -25,7 +25,7 @@ final class NoneAttestationVerifier implements AttestationVerifier
         string $clientDataHash,
     ): AttestationResult {
         if ($attestation->statement !== []) {
-            throw InvalidAttestation::malformedStatement('none', 'the attestation statement must be an empty map');
+            throw InvalidAttestation::malformedStatement('none', 'none_statement_not_empty');
         }
 
         return AttestationResult::none($attestation->format);

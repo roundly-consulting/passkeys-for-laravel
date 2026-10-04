@@ -46,12 +46,31 @@ return [
 
     // Attestation — the statement's maths failed.
     'attestation_malformed_statement' => 'The ":format" attestation statement is malformed: :reason.',
+    'attestation_malformed_reasons' => [
+        'alg_not_cose' => 'alg must be a COSE algorithm identifier',
+        'sig_not_bytes' => 'sig must be a non-empty byte string',
+        'x5c_not_list' => 'x5c must be a non-empty array of DER certificates',
+        'x5c_entry_not_bytes' => 'every x5c entry must be a DER byte string',
+        'x5c_entry_unreadable' => 'an x5c entry is not a readable DER certificate',
+        'x5c_too_long' => 'x5c carries more certificates than a chain may hold',
+        'certificate_key_unreadable' => 'the attestation certificate\'s public key cannot be loaded',
+        'aaguid_extension_not_octet_string' => 'the id-fido-gen-ce-aaguid extension is not an OCTET STRING',
+        'apple_nonce_extension_malformed' => 'the nonce extension (1.2.840.113635.100.8.2) is malformed',
+        'none_statement_not_empty' => 'the attestation statement must be an empty map',
+    ],
     'attestation_signature_mismatch' => 'The ":format" attestation signature could not be verified.',
     'attestation_algorithm_mismatch' => 'The ":format" attestation statement claims COSE algorithm :claimed but its signing key is :actual.',
     'attestation_aaguid_mismatch' => 'The attestation certificate\'s AAGUID does not match the one in the authenticator data.',
     'attestation_credential_key_mismatch' => 'The ":format" attestation certificate certifies a different public key than the credential being registered.',
     'attestation_apple_nonce_mismatch' => 'The Apple attestation certificate\'s nonce is not the hash of this ceremony\'s authenticator data and client data, so the statement does not attest this registration.',
     'attestation_certificate_requirement' => 'The ":format" attestation certificate does not meet a WebAuthn requirement: :requirement.',
+    'attestation_certificate_requirements' => [
+        'x509_v3' => 'the attestation certificate must be X.509 version 3',
+        'subject_ou' => 'the attestation certificate\'s subject OU must be "Authenticator Attestation"',
+        'not_ca' => 'the attestation certificate must not be a CA (basicConstraints CA:FALSE)',
+        'aaguid_extension_not_critical' => 'the id-fido-gen-ce-aaguid extension must not be critical',
+        'apple_nonce_extension' => 'the credential certificate must carry the nonce extension (1.2.840.113635.100.8.2)',
+    ],
     'attestation_ecdaa_unsupported' => 'The ":format" attestation statement uses ECDAA, which WebAuthn Level 3 removed and this relying party never accepts.',
 
     // Attestation — policy refused it.

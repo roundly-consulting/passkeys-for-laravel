@@ -44,11 +44,11 @@ final readonly class PackedStatement
         $signature = $statement['sig'] ?? null;
 
         if (! is_int($algorithm)) {
-            throw InvalidAttestation::malformedStatement('packed', 'alg must be a COSE algorithm identifier');
+            throw InvalidAttestation::malformedStatement('packed', 'alg_not_cose');
         }
 
         if (! is_string($signature) || $signature === '') {
-            throw InvalidAttestation::malformedStatement('packed', 'sig must be a non-empty byte string');
+            throw InvalidAttestation::malformedStatement('packed', 'sig_not_bytes');
         }
 
         return new self($algorithm, $signature, self::x5c($statement));
@@ -75,14 +75,14 @@ final readonly class PackedStatement
         }
 
         if (! is_array($x5c) || $x5c === []) {
-            throw InvalidAttestation::malformedStatement('packed', 'x5c must be a non-empty array of DER certificates');
+            throw InvalidAttestation::malformedStatement('packed', 'x5c_not_list');
         }
 
         $certificates = [];
 
         foreach ($x5c as $certificate) {
             if (! is_string($certificate) || $certificate === '') {
-                throw InvalidAttestation::malformedStatement('packed', 'every x5c entry must be a DER byte string');
+                throw InvalidAttestation::malformedStatement('packed', 'x5c_entry_not_bytes');
             }
 
             $certificates[] = $certificate;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\Cose\CborDecoder;
+use RoundlyConsulting\Crypto\Exceptions\CryptoException;
 use RoundlyConsulting\Crypto\Signature\Key\EcKey;
 use RoundlyConsulting\Crypto\Signature\Key\OkpKey;
 use RoundlyConsulting\Crypto\Signature\Key\RsaKey;
@@ -21,6 +22,7 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidAuthenticatorData;
 use RoundlyConsulting\Passkeys\Tests\Support\AppleVectors;
 use RoundlyConsulting\Passkeys\Tests\Support\RawCertificate;
 use RoundlyConsulting\Passkeys\Tests\Support\TestKeys;
+use RoundlyConsulting\Passkeys\Tests\Support\Thrown;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 
 /**
@@ -288,3 +290,66 @@ it('compares public keys on their material', function (): void {
         ->and(KeysMatch::check($ec, $rsa))->toBeFalse()
         ->and(KeysMatch::check($okp, $ec))->toBeFalse();
 });
+
+// ── Messages in the app locale ───────────────────────────────────────────────
+
+it('words a credential certificate without the nonce extension in the app locale', function (): void {
+    $chain = appleChain($this->credentialKey, $this->authData, $this->clientDataHash, withNonce: false);
+    $statement = decodeAppleStatement(AppleVectors::attStmt(AppleVectors::x5c($chain)));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyApple($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačný certifikát „apple“ nespĺňa požiadavku WebAuthn: certifikát poverenia musí obsahovať rozšírenie nonce (1.2.840.113635.100.8.2).')
+        ->not->toContain('must carry');
+});
+
+it('words a malformed nonce extension in the app locale and keeps the parser\'s detail as the previous exception', function (): void {
+    $chain = TestCertificates::chain(
+        length: 2,
+        leafOptions: new TestLeafOptions(rawExtensions: [AppleVectors::NONCE_OID => "\x02\x01\x05"]),
+        leafKey: $this->credentialKey,
+    );
+    $statement = decodeAppleStatement(AppleVectors::attStmt(AppleVectors::x5c($chain)));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyApple($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „apple“ je chybne zostavené: rozšírenie nonce (1.2.840.113635.100.8.2) má neplatný formát.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class)
+        ->and($thrown->getMessage())->not->toContain((string) $thrown->getPrevious()?->getMessage());
+});
+
+it('words a credential certificate key crypto refuses to load in the app locale', function (): void {
+    $nonce = hash('sha256', $this->authData.$this->clientDataHash, true);
+    $certificate = RawCertificate::mint(
+        "basicConstraints = critical,CA:FALSE\n".AppleVectors::NONCE_OID.' = DER:'.bin2hex(AppleVectors::nonceExtension($nonce)),
+        key: TestKeys::rsa(1024),
+    );
+    $statement = decodeAppleStatement(AppleVectors::attStmt([$certificate->der]));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyApple($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „apple“ je chybne zostavené: verejný kľúč atestačného certifikátu sa nedá načítať.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class);
+});
+
+it('words a malformed apple statement in the app locale', function (array $statement, string $slovak): void {
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyApple($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe("Atestačné vyhlásenie „apple“ je chybne zostavené: {$slovak}.");
+})->with([
+    'x5c empty' => [['x5c' => []], 'x5c musí byť neprázdne pole certifikátov DER'],
+    'x5c entry empty' => [['x5c' => ['']], 'každá položka x5c musí byť reťazec bajtov DER'],
+    'x5c entry not a certificate' => [['x5c' => ['nonsense']], 'niektorá položka x5c nie je čitateľný certifikát DER'],
+]);

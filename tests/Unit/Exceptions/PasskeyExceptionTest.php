@@ -6,6 +6,7 @@ use RoundlyConsulting\Passkeys\Exceptions\ChallengeExpired;
 use RoundlyConsulting\Passkeys\Exceptions\ChallengeMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialAlreadyRegistered;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
+use RoundlyConsulting\Passkeys\Exceptions\InvalidAttestation;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidAuthenticatorData;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidConfiguration;
@@ -97,3 +98,49 @@ it('keeps a caller\'s own expectation wording as is', function (string $expected
     'a code of another group' => ['errors::string'],
     'an unknown code' => ['positive_number'],
 ]);
+
+it('words every malformed-statement reason in the app locale', function (): void {
+    foreach (errorFragments('en', 'attestation_malformed_reasons') as $code => $english) {
+        $slovak = errorFragments('sk', 'attestation_malformed_reasons')[$code];
+
+        app()->setLocale('sk');
+
+        expect(InvalidAttestation::malformedStatement('packed', $code)->getMessage())
+            ->toBe("Atestačné vyhlásenie „packed“ je chybne zostavené: {$slovak}.");
+
+        app()->setLocale('en');
+
+        expect(InvalidAttestation::malformedStatement('packed', $code)->getMessage())
+            ->toBe("The \"packed\" attestation statement is malformed: {$english}.");
+    }
+});
+
+it('words every certificate requirement in the app locale', function (): void {
+    foreach (errorFragments('en', 'attestation_certificate_requirements') as $code => $english) {
+        $slovak = errorFragments('sk', 'attestation_certificate_requirements')[$code];
+
+        app()->setLocale('sk');
+
+        expect(InvalidAttestation::certificateRequirement('packed', $code)->getMessage())
+            ->toBe("Atestačný certifikát „packed“ nespĺňa požiadavku WebAuthn: {$slovak}.");
+
+        app()->setLocale('en');
+
+        expect(InvalidAttestation::certificateRequirement('packed', $code)->getMessage())
+            ->toBe("The \"packed\" attestation certificate does not meet a WebAuthn requirement: {$english}.");
+    }
+});
+
+it('keeps a custom verifier\'s own attestation wording as is', function (): void {
+    expect(InvalidAttestation::malformedStatement('tpm', 'pubArea is truncated')->getMessage())
+        ->toBe('The "tpm" attestation statement is malformed: pubArea is truncated.')
+        ->and(InvalidAttestation::certificateRequirement('tpm', 'the subject must be empty')->getMessage())
+        ->toBe('The "tpm" attestation certificate does not meet a WebAuthn requirement: the subject must be empty.');
+});
+
+it('chains the failure behind a malformed statement', function (): void {
+    $cause = new RuntimeException('Malformed DER: truncated.');
+
+    expect(InvalidAttestation::malformedStatement('packed', 'x5c_entry_unreadable', $cause)->getPrevious())->toBe($cause)
+        ->and(InvalidAttestation::malformedStatement('packed', 'x5c_entry_unreadable')->getPrevious())->toBeNull();
+});

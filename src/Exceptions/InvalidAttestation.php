@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Exceptions;
 
+use Throwable;
+
 /**
  * The attestation statement's MATHS failed: it is malformed, or its signature,
  * algorithm, key binding or certificate shape does not hold.
@@ -14,12 +16,18 @@ namespace RoundlyConsulting\Passkeys\Exceptions;
  */
 final class InvalidAttestation extends PasskeyException
 {
-    public static function malformedStatement(string $format, string $reason): self
+    /**
+     * @param  string  $reason  a code under `errors.attestation_malformed_reasons` (worded
+     *                          in the app locale), or the caller's own wording, kept as is
+     * @param  Throwable|null  $previous  the parser failure behind it, kept for logs — its
+     *                                    untranslated text never reaches the message
+     */
+    public static function malformedStatement(string $format, string $reason, ?Throwable $previous = null): self
     {
         return new self(self::trans('attestation_malformed_statement', [
             'format' => $format,
-            'reason' => $reason,
-        ]));
+            'reason' => self::fragment('attestation_malformed_reasons', $reason),
+        ]), 0, $previous);
     }
 
     public static function signatureMismatch(string $format): self
@@ -60,12 +68,17 @@ final class InvalidAttestation extends PasskeyException
         return new self(self::trans('attestation_apple_nonce_mismatch'));
     }
 
-    /** A §8.2.1-style certificate requirement the leaf does not meet. */
+    /**
+     * A §8.2.1-style certificate requirement the leaf does not meet.
+     *
+     * @param  string  $requirement  a code under `errors.attestation_certificate_requirements`
+     *                               (worded in the app locale), or the caller's own wording, kept as is
+     */
     public static function certificateRequirement(string $format, string $requirement): self
     {
         return new self(self::trans('attestation_certificate_requirement', [
             'format' => $format,
-            'requirement' => $requirement,
+            'requirement' => self::fragment('attestation_certificate_requirements', $requirement),
         ]));
     }
 

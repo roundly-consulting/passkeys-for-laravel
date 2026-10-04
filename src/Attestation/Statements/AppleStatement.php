@@ -35,14 +35,14 @@ final readonly class AppleStatement
         $x5c = $attestation->statement['x5c'] ?? null;
 
         if (! is_array($x5c) || $x5c === []) {
-            throw InvalidAttestation::malformedStatement('apple', 'x5c must be a non-empty array of DER certificates');
+            throw InvalidAttestation::malformedStatement('apple', 'x5c_not_list');
         }
 
         $certificates = [];
 
         foreach ($x5c as $certificate) {
             if (! is_string($certificate) || $certificate === '') {
-                throw InvalidAttestation::malformedStatement('apple', 'every x5c entry must be a DER byte string');
+                throw InvalidAttestation::malformedStatement('apple', 'x5c_entry_not_bytes');
             }
 
             $certificates[] = $certificate;

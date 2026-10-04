@@ -73,7 +73,7 @@ final readonly class AppleAttestationVerifier implements AttestationVerifier
         try {
             $certifiedKey = $credentialCertificate->publicKey();
         } catch (CryptoException $e) {
-            throw InvalidAttestation::malformedStatement('apple', $e->getMessage());
+            throw InvalidAttestation::malformedStatement('apple', 'certificate_key_unreadable', $e);
         }
 
         if (! KeysMatch::check($certifiedKey, $credentialKey)) {
@@ -94,13 +94,20 @@ final readonly class AppleAttestationVerifier implements AttestationVerifier
      */
     private function chain(AppleStatement $statement): Chain
     {
+        $certificates = [];
+
+        foreach ($statement->x5c as $der) {
+            try {
+                $certificates[] = Certificate::fromDer($der);
+            } catch (CryptoException $e) {
+                throw InvalidAttestation::malformedStatement('apple', 'x5c_entry_unreadable', $e);
+            }
+        }
+
         try {
-            return new Chain(array_map(
-                static fn (string $der): Certificate => Certificate::fromDer($der),
-                $statement->x5c,
-            ));
+            return new Chain($certificates);
         } catch (CryptoException $e) {
-            throw InvalidAttestation::malformedStatement('apple', $e->getMessage());
+            throw InvalidAttestation::malformedStatement('apple', 'x5c_too_long', $e);
         }
     }
 
@@ -116,14 +123,11 @@ final readonly class AppleAttestationVerifier implements AttestationVerifier
         try {
             $certified = $this->extensions->appleNonce($credentialCertificate);
         } catch (MalformedDerException $e) {
-            throw InvalidAttestation::malformedStatement('apple', $e->getMessage());
+            throw InvalidAttestation::malformedStatement('apple', 'apple_nonce_extension_malformed', $e);
         }
 
         if ($certified === null) {
-            throw InvalidAttestation::certificateRequirement(
-                'apple',
-                'the credential certificate must carry the nonce extension ('.CertificateExtensions::APPLE_NONCE_OID.')',
-            );
+            throw InvalidAttestation::certificateRequirement('apple', 'apple_nonce_extension');
         }
 
         if (! ConstantTime::equals($certified, $this->digest->raw($authenticatorData.$clientDataHash))) {

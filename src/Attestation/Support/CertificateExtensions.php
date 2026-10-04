@@ -27,7 +27,10 @@ final readonly class CertificateExtensions
     /** WebAuthn §8.2.1 — id-fido-gen-ce-aaguid. */
     public const string FIDO_AAGUID_OID = '1.3.6.1.4.1.45724.1.1.4';
 
-    /** WebAuthn §8.8 — Apple's anonymous-attestation nonce extension. */
+    /**
+     * WebAuthn §8.8 — Apple's anonymous-attestation nonce extension. Spelled out in
+     * the nonce messages of every language file too.
+     */
     public const string APPLE_NONCE_OID = '1.2.840.113635.100.8.2';
 
     public function __construct(private DerDecoder $decoder = new DerDecoder) {}

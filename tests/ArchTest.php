@@ -23,6 +23,7 @@ arch('src only uses allowed vendor roots')
         'Carbon',
         'JsonSerializable',
         'RuntimeException',
+        'Throwable',
         // native helpers used unqualified
         'app',
         'class_basename',

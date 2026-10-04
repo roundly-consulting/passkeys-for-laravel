@@ -10,6 +10,9 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 - `InvalidConfiguration` messages for a mistyped `passkeys.*` setting now name the expected shape
   (for example "a list of strings") in the app's language instead of always in English.
+- `InvalidAttestation` messages now say why a statement is malformed, or which WebAuthn certificate
+  requirement failed, in the app's language. Raw certificate-parser errors no longer leak into the
+  message; they stay available as the exception's previous exception.
 
 ## 1.0.1 - 2026-10-04
 

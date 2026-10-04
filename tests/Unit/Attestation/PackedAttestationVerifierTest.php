@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\Cose\CborDecoder;
+use RoundlyConsulting\Crypto\Exceptions\CryptoException;
 use RoundlyConsulting\Crypto\Testing\TestCertificates;
 use RoundlyConsulting\Crypto\Testing\TestLeafOptions;
 use RoundlyConsulting\Passkeys\Attestation\PackedAttestationVerifier;
@@ -17,6 +18,8 @@ use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RoundlyConsulting\Passkeys\Tests\Support\PackedVectors;
 use RoundlyConsulting\Passkeys\Tests\Support\RawCertificate;
+use RoundlyConsulting\Passkeys\Tests\Support\TestKeys;
+use RoundlyConsulting\Passkeys\Tests\Support\Thrown;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 
 /**
@@ -308,3 +311,110 @@ it('encodes the packed statement fixtures as CBOR the decoder accepts', function
     expect($decoded)->toBe(['alg' => -257, 'sig' => 'sig'])
         ->and(CborEncoder::map([]))->toBe("\xa0");
 });
+
+// ── Messages in the app locale ───────────────────────────────────────────────
+
+it('words why a packed statement is malformed in the app locale', function (array $statement, string $slovak, string $english): void {
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyPacked($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe("Atestačné vyhlásenie „packed“ je chybne zostavené: {$slovak}.")
+        ->not->toContain($english);
+})->with([
+    'alg not an int' => [['alg' => 'ES256', 'sig' => 'x'], 'alg musí byť identifikátor algoritmu COSE', 'must be'],
+    'empty sig' => [['alg' => -7, 'sig' => ''], 'sig musí byť neprázdny reťazec bajtov', 'must be'],
+    'x5c empty' => [['alg' => -7, 'sig' => 'x', 'x5c' => []], 'x5c musí byť neprázdne pole certifikátov DER', 'must be'],
+    'x5c entry not a string' => [['alg' => -7, 'sig' => 'x', 'x5c' => [42]], 'každá položka x5c musí byť reťazec bajtov DER', 'must be'],
+]);
+
+it('words an unreadable certificate in the app locale and keeps the parser\'s detail as the previous exception', function (): void {
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyPacked(['alg' => -7, 'sig' => 'x', 'x5c' => ['nonsense']], $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „packed“ je chybne zostavené: niektorá položka x5c nie je čitateľný certifikát DER.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class)
+        ->and($thrown->getMessage())->not->toContain((string) $thrown->getPrevious()?->getMessage());
+});
+
+it('words a chain longer than crypto will carry in the app locale', function (): void {
+    $chain = PackedVectors::chain(aaguid: $this->aaguid);
+    $statement = decodeStatement(
+        (PackedVectors::chained($chain, x5c: array_fill(0, 11, $chain->leaf()->der())))($this->authData, $this->clientDataHash),
+    );
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyPacked($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „packed“ je chybne zostavené: x5c obsahuje viac certifikátov, než môže reťazec mať.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class);
+});
+
+it('words a certificate key crypto refuses to load in the app locale', function (): void {
+    $certificate = RawCertificate::mint('basicConstraints = critical,CA:FALSE', key: TestKeys::rsa(1024));
+    $statement = decodeStatement(PackedVectors::statement(-257, 'signature', [$certificate->der]));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyPacked($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „packed“ je chybne zostavené: verejný kľúč atestačného certifikátu sa nedá načítať.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class);
+});
+
+it('words an aaguid extension that is not an octet string in the app locale', function (): void {
+    $chain = TestCertificates::chain(
+        length: 2,
+        leafOptions: new TestLeafOptions(
+            rawExtensions: [PackedVectors::AAGUID_OID => "\x02\x01\x05"], // INTEGER, not OCTET STRING
+            subjectOrganizationalUnit: PackedVectors::ATTESTATION_OU,
+        ),
+    );
+    $statement = decodeStatement((PackedVectors::chained($chain))($this->authData, $this->clientDataHash));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyPacked($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „packed“ je chybne zostavené: rozšírenie id-fido-gen-ce-aaguid nie je OCTET STRING.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class);
+});
+
+it('words a WebAuthn certificate requirement in the app locale', function (Closure $certificate, string $slovak, string $english): void {
+    $statement = decodeStatement($certificate->call($this));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyPacked($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe("Atestačný certifikát „packed“ nespĺňa požiadavku WebAuthn: {$slovak}.")
+        ->not->toContain($english);
+})->with([
+    'subject OU' => [
+        fn (): string => (PackedVectors::chained(PackedVectors::chain(aaguid: $this->aaguid, organizationalUnit: null)))($this->authData, $this->clientDataHash),
+        'OU v subjekte atestačného certifikátu musí byť „Authenticator Attestation“',
+        'must be',
+    ],
+    'CA:TRUE' => [
+        function (): string {
+            $certificate = RawCertificate::mint("basicConstraints = critical,CA:TRUE\nkeyUsage = critical,digitalSignature");
+
+            return PackedVectors::statement(-7, $certificate->sign($this->authData.$this->clientDataHash), [$certificate->der]);
+        },
+        'atestačný certifikát nesmie byť certifikačnou autoritou (basicConstraints CA:FALSE)',
+        'must not be',
+    ],
+    'critical aaguid extension' => [
+        fn (): string => (PackedVectors::chained(PackedVectors::chain(aaguid: $this->aaguid, criticalAaguid: true)))($this->authData, $this->clientDataHash),
+        'rozšírenie id-fido-gen-ce-aaguid nesmie byť označené ako kritické',
+        'must not be',
+    ],
+]);

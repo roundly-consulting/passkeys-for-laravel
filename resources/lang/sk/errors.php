@@ -46,12 +46,31 @@ return [
 
     // Attestation — the statement's maths failed.
     'attestation_malformed_statement' => 'Atestačné vyhlásenie „:format“ je chybne zostavené: :reason.',
+    'attestation_malformed_reasons' => [
+        'alg_not_cose' => 'alg musí byť identifikátor algoritmu COSE',
+        'sig_not_bytes' => 'sig musí byť neprázdny reťazec bajtov',
+        'x5c_not_list' => 'x5c musí byť neprázdne pole certifikátov DER',
+        'x5c_entry_not_bytes' => 'každá položka x5c musí byť reťazec bajtov DER',
+        'x5c_entry_unreadable' => 'niektorá položka x5c nie je čitateľný certifikát DER',
+        'x5c_too_long' => 'x5c obsahuje viac certifikátov, než môže reťazec mať',
+        'certificate_key_unreadable' => 'verejný kľúč atestačného certifikátu sa nedá načítať',
+        'aaguid_extension_not_octet_string' => 'rozšírenie id-fido-gen-ce-aaguid nie je OCTET STRING',
+        'apple_nonce_extension_malformed' => 'rozšírenie nonce (1.2.840.113635.100.8.2) má neplatný formát',
+        'none_statement_not_empty' => 'atestačné vyhlásenie musí byť prázdna mapa',
+    ],
     'attestation_signature_mismatch' => 'Podpis atestácie „:format“ sa nepodarilo overiť.',
     'attestation_algorithm_mismatch' => 'Atestačné vyhlásenie „:format“ uvádza algoritmus COSE :claimed, ale jeho podpisový kľúč je :actual.',
     'attestation_aaguid_mismatch' => 'AAGUID v atestačnom certifikáte sa nezhoduje s AAGUID v údajoch autentifikátora.',
     'attestation_credential_key_mismatch' => 'Atestačný certifikát „:format“ osvedčuje iný verejný kľúč, než má registrované poverenie.',
     'attestation_apple_nonce_mismatch' => 'Hodnota nonce v atestačnom certifikáte Apple nie je hashom údajov autentifikátora a údajov klienta tejto ceremónie, preto vyhlásenie neatestuje túto registráciu.',
     'attestation_certificate_requirement' => 'Atestačný certifikát „:format“ nespĺňa požiadavku WebAuthn: :requirement.',
+    'attestation_certificate_requirements' => [
+        'x509_v3' => 'atestačný certifikát musí byť X.509 verzie 3',
+        'subject_ou' => 'OU v subjekte atestačného certifikátu musí byť „Authenticator Attestation“',
+        'not_ca' => 'atestačný certifikát nesmie byť certifikačnou autoritou (basicConstraints CA:FALSE)',
+        'aaguid_extension_not_critical' => 'rozšírenie id-fido-gen-ce-aaguid nesmie byť označené ako kritické',
+        'apple_nonce_extension' => 'certifikát poverenia musí obsahovať rozšírenie nonce (1.2.840.113635.100.8.2)',
+    ],
     'attestation_ecdaa_unsupported' => 'Atestačné vyhlásenie „:format“ používa ECDAA, ktoré bolo z WebAuthn Level 3 odstránené a táto spoliehajúca sa strana ho nikdy neprijíma.',
 
     // Attestation — policy refused it.

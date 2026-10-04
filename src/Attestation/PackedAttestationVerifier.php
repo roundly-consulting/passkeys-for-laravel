@@ -34,6 +34,7 @@ use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
  */
 final readonly class PackedAttestationVerifier implements AttestationVerifier
 {
+    /** Spelled out in the `subject_ou` requirement of every language file too. */
     private const string ATTESTATION_SUBJECT_OU = 'Authenticator Attestation';
 
     public function __construct(
@@ -94,7 +95,7 @@ final readonly class PackedAttestationVerifier implements AttestationVerifier
         try {
             $leafKey = $leaf->publicKey();
         } catch (CryptoException $e) {
-            throw InvalidAttestation::malformedStatement('packed', $e->getMessage());
+            throw InvalidAttestation::malformedStatement('packed', 'certificate_key_unreadable', $e);
         }
 
         // The statement names an algorithm; the key IS one. They must agree, or a
@@ -118,13 +119,20 @@ final readonly class PackedAttestationVerifier implements AttestationVerifier
      */
     private function chain(PackedStatement $statement): Chain
     {
+        $certificates = [];
+
+        foreach ($statement->x5c as $der) {
+            try {
+                $certificates[] = Certificate::fromDer($der);
+            } catch (CryptoException $e) {
+                throw InvalidAttestation::malformedStatement('packed', 'x5c_entry_unreadable', $e);
+            }
+        }
+
         try {
-            return new Chain(array_map(
-                static fn (string $der): Certificate => Certificate::fromDer($der),
-                $statement->x5c,
-            ));
+            return new Chain($certificates);
         } catch (CryptoException $e) {
-            throw InvalidAttestation::malformedStatement('packed', $e->getMessage());
+            throw InvalidAttestation::malformedStatement('packed', 'x5c_too_long', $e);
         }
     }
 
@@ -162,18 +170,15 @@ final readonly class PackedAttestationVerifier implements AttestationVerifier
     private function assertCertificateRequirements(Certificate $leaf): void
     {
         if ($leaf->version() !== 3) {
-            throw InvalidAttestation::certificateRequirement('packed', 'the attestation certificate must be X.509 version 3');
+            throw InvalidAttestation::certificateRequirement('packed', 'x509_v3');
         }
 
         if ($leaf->subject()->organizationalUnit !== self::ATTESTATION_SUBJECT_OU) {
-            throw InvalidAttestation::certificateRequirement(
-                'packed',
-                'the attestation certificate\'s subject OU must be "'.self::ATTESTATION_SUBJECT_OU.'"',
-            );
+            throw InvalidAttestation::certificateRequirement('packed', 'subject_ou');
         }
 
         if ($this->extensions->isCertificateAuthority($leaf)) {
-            throw InvalidAttestation::certificateRequirement('packed', 'the attestation certificate must not be a CA (basicConstraints CA:FALSE)');
+            throw InvalidAttestation::certificateRequirement('packed', 'not_ca');
         }
     }
 
@@ -189,7 +194,7 @@ final readonly class PackedAttestationVerifier implements AttestationVerifier
         try {
             $certified = $this->extensions->fidoAaguid($leaf);
         } catch (CryptoException $e) {
-            throw InvalidAttestation::malformedStatement('packed', 'the id-fido-gen-ce-aaguid extension is not an OCTET STRING ('.$e->getMessage().')');
+            throw InvalidAttestation::malformedStatement('packed', 'aaguid_extension_not_octet_string', $e);
         }
 
         if ($certified === null) {
@@ -197,7 +202,7 @@ final readonly class PackedAttestationVerifier implements AttestationVerifier
         }
 
         if ($this->extensions->fidoAaguidIsCritical($leaf)) {
-            throw InvalidAttestation::certificateRequirement('packed', 'the id-fido-gen-ce-aaguid extension must not be critical');
+            throw InvalidAttestation::certificateRequirement('packed', 'aaguid_extension_not_critical');
         }
 
         if (strlen($certified) !== 16 || ! ConstantTime::equals($certified, (string) $authenticatorData->aaguid)) {

@@ -38,3 +38,13 @@ it('rejects a none statement that carries data', function (): void {
         'hash',
     );
 })->throws(InvalidAttestation::class, 'empty map');
+
+it('words a none statement that carries data in the app locale', function (): void {
+    app()->setLocale('sk');
+
+    expect(fn () => (new NoneAttestationVerifier)->verify(
+        new AttestationObject(format: 'none', statement: ['sig' => 'x'], authenticatorData: 'raw'),
+        parsedStub(),
+        'hash',
+    ))->toThrow(InvalidAttestation::class, 'Atestačné vyhlásenie „none“ je chybne zostavené: atestačné vyhlásenie musí byť prázdna mapa.');
+});
