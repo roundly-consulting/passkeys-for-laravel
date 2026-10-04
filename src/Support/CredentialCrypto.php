@@ -54,7 +54,7 @@ final readonly class CredentialCrypto
         try {
             $decoded = $this->cbor->decode($bytes);
         } catch (MalformedCborException $e) {
-            throw MalformedCbor::make($e->getMessage());
+            throw MalformedCbor::make($e->getMessage(), $e);
         }
 
         return AttestationObject::fromDecoded($decoded);
@@ -71,7 +71,7 @@ final readonly class CredentialCrypto
         try {
             return AuthenticatorData::parse($bytes);
         } catch (CryptoException $e) {
-            throw self::translate($e, InvalidAuthenticatorData::because($e->getMessage()));
+            throw self::translate($e, InvalidAuthenticatorData::because($e->getMessage(), $e));
         }
     }
 
@@ -91,7 +91,7 @@ final readonly class CredentialCrypto
         try {
             $decoded = $this->cbor->decode($coseBytes);
         } catch (MalformedCborException $e) {
-            throw MalformedCbor::make($e->getMessage());
+            throw MalformedCbor::make($e->getMessage(), $e);
         }
 
         if (! is_array($decoded)) {
@@ -101,7 +101,7 @@ final readonly class CredentialCrypto
         try {
             return CoseKey::fromCbor($coseBytes);
         } catch (CryptoException $e) {
-            throw self::translate($e, MalformedCbor::make($e->getMessage()));
+            throw self::translate($e, MalformedCbor::make($e->getMessage(), $e));
         }
     }
 
@@ -117,7 +117,7 @@ final readonly class CredentialCrypto
         try {
             return $this->verifier->verify($key, $signedData, $signature);
         } catch (UnsupportedAlgorithmException $e) {
-            throw UnsupportedAlgorithm::because($e->getMessage());
+            throw UnsupportedAlgorithm::because($e->getMessage(), $e);
         } catch (CryptoException) {
             // A malformed, attacker-supplied signature is a failed verification,
             // never an error the host has to handle.
@@ -164,9 +164,9 @@ final readonly class CredentialCrypto
     private static function translate(CryptoException $error, PasskeyException $default): PasskeyException
     {
         return match (true) {
-            $error instanceof UnsupportedAlgorithmException => UnsupportedAlgorithm::because($error->getMessage()),
+            $error instanceof UnsupportedAlgorithmException => UnsupportedAlgorithm::because($error->getMessage(), $error),
             $error instanceof MalformedCborException => $default,
-            default => InvalidCoseKey::make($error->getMessage()),
+            default => InvalidCoseKey::make($error->getMessage(), $error),
         };
     }
 }

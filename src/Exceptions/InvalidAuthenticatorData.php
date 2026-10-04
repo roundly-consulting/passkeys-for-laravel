@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Passkeys\Exceptions;
 
+use Throwable;
+
 final class InvalidAuthenticatorData extends PasskeyException
 {
     public static function make(): self
@@ -36,11 +38,14 @@ final class InvalidAuthenticatorData extends PasskeyException
     }
 
     /**
-     * The byte structure failed to parse — the crypto layer's reason is carried
-     * through so the cause survives the boundary translation.
+     * The byte structure failed to parse.
+     *
+     * @param  string  $reason  the crypto layer's own, untranslated account — kept for
+     *                          logs ({@see context()}), never in the localised message
+     * @param  Throwable|null  $previous  the lower-level exception behind it
      */
-    public static function because(string $reason): self
+    public static function because(string $reason, ?Throwable $previous = null): self
     {
-        return new self(self::trans('invalid_authenticator_data').' ('.$reason.')');
+        return (new self(self::trans('invalid_authenticator_data'), 0, $previous))->withReason($reason);
     }
 }

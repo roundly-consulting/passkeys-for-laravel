@@ -47,9 +47,32 @@ it('resolves translated, non-empty messages for the simple factories', function 
 it('includes context in the parameterised factories', function (): void {
     expect(InvalidClientData::wrongType('webauthn.create')->getMessage())->toContain('webauthn.create');
     expect(UnsupportedAlgorithm::forId(-999)->getMessage())->toContain('-999');
-    expect(InvalidCoseKey::make('bad curve')->getMessage())->toContain('bad curve');
-    expect(MalformedCbor::make('truncated')->getMessage())->toContain('truncated');
     expect(SignCountRegression::make(10, 5)->getMessage())->toContain('5 <= 10');
+});
+
+it('keeps a lower layer\'s reason for logs, never in the message', function (PasskeyException $exception, string $message): void {
+    expect($exception->getMessage())->toBe($message)
+        ->and($exception->context())->toBe(['reason' => 'bad input'])
+        ->and($exception->getPrevious())->toBeNull();
+})->with([
+    'malformed cbor' => [fn () => MalformedCbor::make('bad input'), 'The CBOR data is malformed.'],
+    'invalid cose key' => [fn () => InvalidCoseKey::make('bad input'), 'The COSE public key is invalid.'],
+    'invalid authenticator data' => [fn () => InvalidAuthenticatorData::because('bad input'), 'The authenticator data is invalid.'],
+    'unsupported algorithm' => [fn () => UnsupportedAlgorithm::because('bad input'), 'The credential algorithm is not supported.'],
+]);
+
+it('chains the lower-level exception behind a reason', function (): void {
+    $cause = new RuntimeException('Malformed CBOR: truncated.');
+
+    expect(MalformedCbor::make('truncated', $cause)->getPrevious())->toBe($cause)
+        ->and(InvalidCoseKey::make('truncated', $cause)->getPrevious())->toBe($cause)
+        ->and(InvalidAuthenticatorData::because('truncated', $cause)->getPrevious())->toBe($cause)
+        ->and(UnsupportedAlgorithm::because('truncated', $cause)->getPrevious())->toBe($cause);
+});
+
+it('carries no log context when there is no lower-level reason', function (): void {
+    expect(ChallengeExpired::make()->context())->toBe([])
+        ->and(MalformedCbor::make('')->context())->toBe([]);
 });
 
 it('is throwable and catchable as the package base type', function (): void {

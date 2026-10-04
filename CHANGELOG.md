@@ -13,6 +13,9 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 - `InvalidAttestation` messages now say why a statement is malformed, or which WebAuthn certificate
   requirement failed, in the app's language. Raw certificate-parser errors no longer leak into the
   message; they stay available as the exception's previous exception.
+- `MalformedCbor`, `InvalidCoseKey`, `InvalidAuthenticatorData` and `UnsupportedAlgorithm` no longer
+  append the decoder's English error text to their translated message. Developers still get it: as
+  the previous exception, and under `reason` in the log context Laravel records with the exception.
 
 ## 1.0.1 - 2026-10-04
 

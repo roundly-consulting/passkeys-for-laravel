@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RoundlyConsulting\Crypto\Cose\CborDecoder;
 use RoundlyConsulting\Crypto\Cose\UnsupportedAlgorithmException;
+use RoundlyConsulting\Crypto\Exceptions\CryptoException;
 use RoundlyConsulting\Crypto\Signature\Algorithm;
 use RoundlyConsulting\Crypto\Signature\InvalidSignatureException;
 use RoundlyConsulting\Crypto\Signature\Key\PublicKey;
@@ -19,6 +20,7 @@ use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 use RoundlyConsulting\Passkeys\Testing\CborEncoder;
 use RoundlyConsulting\Passkeys\Tests\Support\TestKeys;
+use RoundlyConsulting\Passkeys\Tests\Support\Thrown;
 
 /*
  * The crypto boundary. Every failure crypto can raise must arrive at the caller as
@@ -216,3 +218,114 @@ it('refuses a key whose algorithm has no COSE identifier', function (): void {
 
     crypto()->coseAlgorithm($key);
 })->throws(UnsupportedAlgorithm::class);
+
+// --- messages in the app locale ----------------------------------------------
+
+it('keeps crypto\'s untranslated detail out of the message, for logs only', function (Closure $fail, string $class, string $slovak): void {
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by($fail);
+    $previous = $thrown->getPrevious();
+
+    expect($thrown)->toBeInstanceOf($class)
+        ->and($thrown->getMessage())->toBe($slovak)
+        ->and($previous)->toBeInstanceOf(CryptoException::class)
+        ->and($thrown->context())->toBe(['reason' => $previous?->getMessage()]);
+})->with([
+    'malformed attestation CBOR' => [
+        fn () => crypto()->attestationObject("\xff\xff\xff"),
+        MalformedCbor::class,
+        'Údaje CBOR majú neplatný formát.',
+    ],
+    'malformed stored key CBOR' => [
+        fn () => crypto()->storedPublicKey(storedKey(base64_encode("\xff\xff\xff"))),
+        MalformedCbor::class,
+        'Údaje CBOR majú neplatný formát.',
+    ],
+    'stored key missing a label' => [
+        fn () => crypto()->storedPublicKey(storedKey(base64_encode(CborEncoder::map([[CborEncoder::uint(1), CborEncoder::uint(2)]])))),
+        MalformedCbor::class,
+        'Údaje CBOR majú neplatný formát.',
+    ],
+    'truncated authenticator data' => [
+        fn () => crypto()->authenticatorData('too short'),
+        InvalidAuthenticatorData::class,
+        'Údaje autentifikátora nie sú platné.',
+    ],
+    'malformed EC2 coordinate' => [
+        fn () => crypto()->authenticatorData(attestedAuthData(CborEncoder::map([
+            [CborEncoder::uint(1), CborEncoder::uint(2)],
+            [CborEncoder::uint(3), CborEncoder::nint(-7)],
+            [CborEncoder::nint(-1), CborEncoder::uint(1)],
+            [CborEncoder::nint(-2), CborEncoder::bstr(str_repeat("\x01", 31))],
+            [CborEncoder::nint(-3), CborEncoder::bstr(str_repeat("\x02", 32))],
+        ]))),
+        InvalidCoseKey::class,
+        'Verejný kľúč COSE nie je platný.',
+    ],
+    'unknown COSE algorithm' => [
+        fn () => crypto()->authenticatorData(attestedAuthData(CborEncoder::map([
+            [CborEncoder::uint(1), CborEncoder::uint(2)],
+            [CborEncoder::nint(-999), CborEncoder::uint(1)],
+            [CborEncoder::uint(3), CborEncoder::nint(-999)],
+        ]))),
+        UnsupportedAlgorithm::class,
+        'Algoritmus poverenia nie je podporovaný.',
+    ],
+    'stored key of an unknown type' => [
+        fn () => crypto()->storedPublicKey(storedKey(base64_encode(CborEncoder::map([
+            [CborEncoder::uint(1), CborEncoder::uint(9)],
+            [CborEncoder::uint(3), CborEncoder::nint(-7)],
+        ])))),
+        UnsupportedAlgorithm::class,
+        'Algoritmus poverenia nie je podporovaný.',
+    ],
+    'EdDSA without ext-sodium' => [
+        fn () => crypto()->verify(new class implements PublicKey
+        {
+            public function algorithm(): Algorithm
+            {
+                return Algorithm::EdDSA;
+            }
+
+            public function verifier(): Verifier
+            {
+                return new class implements Verifier
+                {
+                    public function algorithm(): Algorithm
+                    {
+                        return Algorithm::EdDSA;
+                    }
+
+                    public function verify(string $message, string $signature): bool
+                    {
+                        throw UnsupportedAlgorithmException::sodiumMissing();
+                    }
+                };
+            }
+        }, 'data', 'signature'),
+        UnsupportedAlgorithm::class,
+        'Algoritmus poverenia nie je podporovaný.',
+    ],
+]);
+
+it('keeps the name of a key algorithm without a COSE identifier for logs', function (): void {
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => crypto()->coseAlgorithm(new class implements PublicKey
+    {
+        public function algorithm(): Algorithm
+        {
+            return Algorithm::HS256;
+        }
+
+        public function verifier(): Verifier
+        {
+            throw InvalidSignatureException::make();
+        }
+    }));
+
+    expect($thrown)->toBeInstanceOf(UnsupportedAlgorithm::class)
+        ->and($thrown->getMessage())->toBe('Algoritmus poverenia nie je podporovaný.')
+        ->and($thrown->context())->toBe(['reason' => 'HS256']);
+});

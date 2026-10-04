@@ -16,6 +16,28 @@ use RuntimeException;
  */
 abstract class PasskeyException extends RuntimeException
 {
+    /** A lower layer's own, untranslated account of the failure — logged, never shown. */
+    private string $reason = '';
+
+    /**
+     * Merged into the log entry by Laravel's exception handler, so the lower
+     * layer's reason stays available to developers without reaching the
+     * localised message.
+     *
+     * @return array<string, string>
+     */
+    public function context(): array
+    {
+        return $this->reason === '' ? [] : ['reason' => $this->reason];
+    }
+
+    protected function withReason(string $reason): static
+    {
+        $this->reason = $reason;
+
+        return $this;
+    }
+
     /**
      * @param  array<string, string>  $replace
      */
