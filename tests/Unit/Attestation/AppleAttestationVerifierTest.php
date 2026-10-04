@@ -353,3 +353,16 @@ it('words a malformed apple statement in the app locale', function (array $state
     'x5c entry empty' => [['x5c' => ['']], 'každá položka x5c musí byť reťazec bajtov DER'],
     'x5c entry not a certificate' => [['x5c' => ['nonsense']], 'niektorá položka x5c nie je čitateľný certifikát DER'],
 ]);
+
+it('words a chain longer than crypto will carry in the app locale', function (): void {
+    $chain = appleChain($this->credentialKey, $this->authData, $this->clientDataHash);
+    $statement = decodeAppleStatement(AppleVectors::attStmt(array_fill(0, 11, $chain->leaf()->der())));
+
+    app()->setLocale('sk');
+
+    $thrown = Thrown::by(fn () => verifyApple($statement, $this->authData, $this->parsed, $this->clientDataHash));
+
+    expect($thrown)->toBeInstanceOf(InvalidAttestation::class)
+        ->and($thrown->getMessage())->toBe('Atestačné vyhlásenie „apple“ je chybne zostavené: x5c obsahuje viac certifikátov, než môže reťazec mať.')
+        ->and($thrown->getPrevious())->toBeInstanceOf(CryptoException::class);
+});
