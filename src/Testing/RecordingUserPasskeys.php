@@ -45,7 +45,7 @@ final readonly class RecordingUserPasskeys extends UserPasskeys
 
     public function authenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
     {
-        return $this->fake->fakeAuthenticationOptions($overrides);
+        return $this->fake->fakeAuthenticationOptions($overrides, $this->user);
     }
 
     public function authenticate(AuthenticationResponseData $response): Passkey

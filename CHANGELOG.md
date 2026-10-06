@@ -23,6 +23,13 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `PasskeyRegistered` / `PasskeyAuthenticated` through the app's event dispatcher, as the real
   ceremonies do, so your listeners run in tests that use the fake. Wrap the test in `Event::fake()`
   if your listeners must not run. A programmed failure dispatches nothing.
+- `Passkeys::fake()`: the options now follow the real ones except for the canned ceremony id,
+  challenge and relying party. They honour the `timeoutMs`, `residentKey` and `authenticatorAttachment`
+  overrides, take their defaults from `passkeys.*` (timeout, user verification, resident key,
+  attestation, algorithms) instead of fixed values, and list the account's active passkeys in
+  `excludeCredentials` / `allowCredentials` for `Passkeys::for($user)`. A test that asserted the old
+  fixed values will notice: the shipped config offers ES256 and RS256 (the fake offered ES256 only),
+  and a changed `passkeys.timeout_ms`, `user_verification` or `resident_key` now shows.
 
 ### Fixed
 
@@ -44,6 +51,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   be tested under the fake.
 - `Passkeys::fake()` now fires the registration and authentication events, so a host's listener (for
   example a "new passkey added" mail) can be tested under the fake.
+- `Passkeys::fake()` no longer drops the registration `timeoutMs`, `residentKey` and
+  `authenticatorAttachment` overrides, or the exclude / allow credential lists, from its options.
 
 ## 1.0.2 - 2026-10-04
 

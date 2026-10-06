@@ -9,7 +9,6 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Codec\InvalidEncodingException;
-use RoundlyConsulting\Crypto\Cose\CoseAlgorithm;
 use RoundlyConsulting\Passkeys\Attestation\AttestationVerifierRegistry;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
@@ -17,10 +16,10 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\CreationOptionsData;
+use RoundlyConsulting\Passkeys\DataTransferObjects\CredentialDescriptor;
+use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
-use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
-use RoundlyConsulting\Passkeys\Enums\UserVerification;
 use RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated;
 use RoundlyConsulting\Passkeys\Events\PasskeyRegistered;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
@@ -179,41 +178,73 @@ final class PasskeysFake implements PasskeyService
     }
 
     /**
-     * Canned creation options for `for($user)->registrationOptions()`.
+     * Creation options for `for($user)->registrationOptions()`: the canned ceremony id,
+     * challenge and relying party, everything else as the real action builds it — the
+     * overrides, the configured defaults and the account's active passkeys in
+     * excludeCredentials. The relying party and origins are never required, so a host
+     * test with none configured still works.
      *
      * @internal called by the recording handle
      */
     public function fakeRegistrationOptions(HasPasskeys $user, ?RegistrationOptionsOverrides $overrides = null): CreationOptionsData
     {
+        $config = $this->config();
+
         return new CreationOptionsData(
             ceremonyId: self::CANNED_CEREMONY_ID,
             rpId: 'localhost',
             rpName: 'Fake',
-            userHandle: self::rawUserHandle($user),
+            userHandle: self::decode($user->passkeyUserHandle()),
             userName: $user->passkeyUserName(),
             userDisplayName: $user->passkeyDisplayName(),
             challenge: self::CANNED_CHALLENGE,
-            algorithms: [CoseAlgorithm::ES256->value],
-            timeoutMs: 60_000,
-            attestation: $overrides->attestation ?? AttestationConveyance::None,
-            userVerification: $overrides->userVerification ?? UserVerification::Required,
+            algorithms: $config->algorithms,
+            timeoutMs: $overrides->timeoutMs ?? $config->timeoutMs,
+            attestation: $overrides->attestation ?? $config->attestation,
+            userVerification: $overrides->userVerification ?? $config->userVerification,
+            excludeCredentials: self::descriptors($user),
+            residentKey: $overrides->residentKey ?? $config->residentKey,
+            authenticatorAttachment: $overrides?->authenticatorAttachment,
         );
     }
 
     /**
-     * `CreationOptionsData::$userHandle` is the RAW handle (it serialises it to
-     * base64url itself), so the stored handle is decoded exactly as the real
-     * service decodes it — including refusing a malformed one.
+     * The account's active passkeys as credential descriptors, as the real options
+     * list them.
+     *
+     * @return list<CredentialDescriptor>
      *
      * @throws InvalidClientData
      */
-    private static function rawUserHandle(HasPasskeys $user): string
+    private static function descriptors(HasPasskeys $user): array
+    {
+        return array_values($user->passkeys()->get()
+            ->map(static fn (Passkey $passkey): CredentialDescriptor => new CredentialDescriptor(
+                id: self::decode($passkey->credential_id),
+                transports: $passkey->transports,
+            ))
+            ->all());
+    }
+
+    /**
+     * Stored values (the user handle, credential ids) are base64url; the options carry
+     * them RAW and serialise them back themselves, so they are decoded exactly as the
+     * real service decodes them — including refusing a malformed one.
+     *
+     * @throws InvalidClientData
+     */
+    private static function decode(string $value): string
     {
         try {
-            return Base64Url::decode($user->passkeyUserHandle());
+            return Base64Url::decode($value);
         } catch (InvalidEncodingException) {
             throw InvalidClientData::malformed();
         }
+    }
+
+    private function config(): PasskeyConfig
+    {
+        return $this->container->make(PasskeyConfig::class);
     }
 
     /**
@@ -245,18 +276,24 @@ final class PasskeysFake implements PasskeyService
     }
 
     /**
-     * Canned request options for both the flat and the scoped ceremony.
+     * Request options for the flat and the scoped ceremony: the canned ceremony id,
+     * challenge and relying party, the overrides and configured defaults, and — for
+     * `for($user)` — the account's active passkeys in allowCredentials. The flat,
+     * usernameless request offers none, as the real one does.
      *
      * @internal called by the recording handle
      */
-    public function fakeAuthenticationOptions(?AuthenticationOptionsOverrides $overrides = null): RequestOptionsData
+    public function fakeAuthenticationOptions(?AuthenticationOptionsOverrides $overrides = null, ?HasPasskeys $user = null): RequestOptionsData
     {
+        $config = $this->config();
+
         return new RequestOptionsData(
             ceremonyId: self::CANNED_CEREMONY_ID,
             rpId: 'localhost',
             challenge: self::CANNED_CHALLENGE,
-            timeoutMs: $overrides->timeoutMs ?? 60_000,
-            userVerification: $overrides->userVerification ?? UserVerification::Required,
+            timeoutMs: $overrides->timeoutMs ?? $config->timeoutMs,
+            userVerification: $overrides->userVerification ?? $config->userVerification,
+            allowCredentials: $user === null ? [] : self::descriptors($user),
         );
     }
 
