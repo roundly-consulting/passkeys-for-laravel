@@ -6,6 +6,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+## 1.1.0 - 2026-10-06
+
 ### Changed
 
 - `Passkeys::authenticate()` and `Passkeys::for($user)->authenticate()` now refuse, with
