@@ -27,6 +27,7 @@ use RoundlyConsulting\Passkeys\Exceptions\SignCountRegression;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
+use RoundlyConsulting\Passkeys\Tests\Support\AbstractOwner;
 use RoundlyConsulting\Passkeys\Tests\Support\ContractOwner;
 use RoundlyConsulting\Passkeys\Tests\Support\Member;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
@@ -309,6 +310,7 @@ describe('a credential whose owner no longer holds it', function (): void {
         'a renamed class' => 'App\Models\RetiredMember',
         'a morph alias no longer mapped' => 'retired-member',
         'a class that is no model' => stdClass::class,
+        'an abstract model' => AbstractOwner::class,
     ]);
 });
 

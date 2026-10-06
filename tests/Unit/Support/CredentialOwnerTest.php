@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Eloquent\Relations\Relation;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\CredentialOwner;
+use RoundlyConsulting\Passkeys\Tests\Support\AbstractOwner;
 use RoundlyConsulting\Passkeys\Tests\Support\PlainOwner;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 
@@ -39,6 +40,7 @@ it('refuses an owner type that names no model, without resolving it', function (
     'the factory default' => 'user',
     'a missing class' => 'App\\Models\\RetiredUser',
     'a class that is no model' => stdClass::class,
+    'an abstract model' => AbstractOwner::class,
 ]);
 
 it('checks an owner without HasPasskeys for existence only', function (): void {

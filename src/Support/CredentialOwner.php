@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use ReflectionClass;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Passkeys\Concerns\InteractsWithPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
@@ -52,14 +53,17 @@ final class CredentialOwner
     }
 
     /**
-     * Whether the passkey's owner type names an Eloquent model, directly or through
-     * the morph map — resolving the relation of one that does not throws.
+     * Whether the passkey's owner type names a concrete Eloquent model, directly or
+     * through the morph map — resolving the relation of one that does not (an
+     * abstract model included) throws.
      */
     private static function resolvable(Passkey $passkey): bool
     {
         $class = $passkey::getActualClassNameForMorph($passkey->authenticatable_type);
 
-        return class_exists($class) && is_subclass_of($class, Model::class);
+        return class_exists($class)
+            && is_subclass_of($class, Model::class)
+            && ! (new ReflectionClass($class))->isAbstract();
     }
 
     private static function storedHandle(Model&HasPasskeys $owner): string
