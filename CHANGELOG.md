@@ -6,6 +6,20 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+### Changed
+
+- `Passkeys::authenticate()` and `Passkeys::for($user)->authenticate()` now refuse, with
+  `CredentialNotFound`, a passkey whose owner was deleted or soft-deleted, or whose owner's stored
+  user handle no longer matches the passkey's. An app that let soft-deleted accounts sign in with a
+  passkey will notice.
+
+### Fixed
+
+- A passkey of a deleted or soft-deleted account no longer authenticates. It used to return a
+  passkey whose `authenticatable` was `null`, so `Auth::login($passkey->authenticatable)` failed. A
+  new account that reuses a deleted account's id no longer signs in with that account's passkeys,
+  and the check mints no user handle.
+
 ## 1.0.2 - 2026-10-04
 
 ### Fixed

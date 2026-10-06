@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Actions;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
 use RoundlyConsulting\Crypto\Hash\Digest;
+use RoundlyConsulting\Passkeys\Concerns\InteractsWithPasskeys;
 use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
+use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationExpectation;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\ChallengeData;
@@ -34,6 +37,7 @@ use RoundlyConsulting\Passkeys\Exceptions\UserVerificationRequired;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\CredentialCrypto;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
+use RoundlyConsulting\Passkeys\Support\UserHandleColumn;
 
 /**
  * Verifies an authentication (assertion) response and advances the sign counter,
@@ -66,8 +70,10 @@ final readonly class VerifyAuthenticationAction
         $rpId = $this->config->requireRpId();
         $origins = $this->config->requireOrigins();
 
-        // §7.2.1-6 — locate the credential (uniform miss, no user enumeration).
+        // §7.2.1-6 — locate the credential (uniform miss, no user enumeration) and
+        // the account that still holds it.
         $passkey = $this->locateCredential($response);
+        $this->assertOwnerHoldsCredential($passkey);
 
         // The caller's owner expectation is checked before the challenge is pulled,
         // so a credential of the wrong owner neither burns the ceremony nor gets its
@@ -138,6 +144,43 @@ final readonly class VerifyAuthenticationAction
         }
 
         return $passkey;
+    }
+
+    /**
+     * The owner must still exist — a soft-deleted one is gone, as Laravel's own user
+     * provider sees it — and must still hold the handle the credential was minted
+     * for, so an account that reuses a deleted owner's id never inherits its
+     * passkeys. Checked before the challenge is pulled, with the uniform miss.
+     *
+     * The shipped concern's handle is read straight off its column: asking the
+     * concern would mint a handle for an account that has none, and a fresh random
+     * handle can never match anyway. Any other implementation is asked through the
+     * contract.
+     */
+    private function assertOwnerHoldsCredential(Passkey $passkey): void
+    {
+        // Not `$passkey->authenticatable`: loading the relation would add the owner
+        // to the returned passkey's array/JSON form.
+        $owner = $passkey->authenticatable()->getResults();
+
+        if ($owner === null) {
+            throw CredentialNotFound::make();
+        }
+
+        if ($owner instanceof HasPasskeys && ! ConstantTime::equals(self::storedHandle($owner), $passkey->user_handle)) {
+            throw CredentialNotFound::make();
+        }
+    }
+
+    private static function storedHandle(Model&HasPasskeys $owner): string
+    {
+        if (! in_array(InteractsWithPasskeys::class, class_uses_recursive($owner), true)) {
+            return $owner->passkeyUserHandle();
+        }
+
+        $handle = $owner->getAttribute(UserHandleColumn::name());
+
+        return is_string($handle) ? $handle : '';
     }
 
     /**

@@ -27,6 +27,7 @@ arch('src only uses allowed vendor roots')
         // native helpers used unqualified
         'app',
         'class_basename',
+        'class_uses_recursive',
         'config',
         'config_path',
         'database_path',

@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Passkeys\Actions\GenerateAuthenticationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
@@ -21,8 +23,11 @@ use RoundlyConsulting\Passkeys\Exceptions\OriginMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\RpIdMismatch;
 use RoundlyConsulting\Passkeys\Exceptions\SignatureInvalid;
 use RoundlyConsulting\Passkeys\Exceptions\SignCountRegression;
+use RoundlyConsulting\Passkeys\Facades\Passkeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Testing\VirtualAuthenticator;
+use RoundlyConsulting\Passkeys\Tests\Support\ContractOwner;
+use RoundlyConsulting\Passkeys\Tests\Support\Member;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 use RoundlyConsulting\Passkeys\Tests\Support\WebAuthnVectors;
 
@@ -201,6 +206,112 @@ it('skips the sign-count comparison for static zero counters', function (): void
 
     expect($passkey->sign_count)->toBe(0)
         ->and($passkey->last_used_at)->not->toBeNull();
+});
+
+describe('a credential whose owner no longer holds it', function (): void {
+    beforeEach(function (): void {
+        Schema::create('members', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
+            $table->passkeyUserHandle();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
+        $this->member = Member::query()->create(['name' => 'Ada', 'email' => 'ada@example.com']);
+        $this->authenticator = VirtualAuthenticator::es256();
+        $this->passkey = Passkeys::for($this->member)->register(
+            $this->authenticator->register(Passkeys::for($this->member)->registrationOptions()),
+        );
+    });
+
+    /**
+     * The usernameless login is refused with the uniform not-found error and leaves no
+     * trace: no event, and the counter and usage stamp untouched.
+     */
+    function expectRefusedLogin(object $test): void
+    {
+        Event::fake([PasskeyAuthenticated::class]);
+        $before = Passkey::query()->withTrashed()->findOrFail($test->passkey->getKey());
+
+        expect(fn () => Passkeys::authenticate($test->authenticator->assert(Passkeys::authenticationOptions())))
+            ->toThrow(CredentialNotFound::class);
+
+        $after = Passkey::query()->withTrashed()->findOrFail($test->passkey->getKey());
+
+        expect($after->sign_count)->toBe($before->sign_count)
+            ->and($after->last_used_at)->toBeNull();
+        Event::assertNotDispatched(PasskeyAuthenticated::class);
+    }
+
+    it('still signs the owner in while it holds the credential', function (): void {
+        $passkey = Passkeys::authenticate($this->authenticator->assert(Passkeys::authenticationOptions()));
+
+        expect($passkey->is($this->passkey))->toBeTrue()
+            ->and($passkey->authenticatable->is($this->member))->toBeTrue();
+    });
+
+    it('refuses a soft-deleted owner', function (): void {
+        $this->member->delete();
+
+        expectRefusedLogin($this);
+    });
+
+    it('refuses a hard-deleted owner', function (): void {
+        $this->member->forceDelete();
+
+        expectRefusedLogin($this);
+    });
+
+    it('refuses a new account that reuses the old owner id, minting it no handle', function (): void {
+        $id = $this->member->getKey();
+        $this->member->forceDelete();
+        $newcomer = Member::query()->create(['id' => $id, 'name' => 'Eve', 'email' => 'eve@example.com']);
+
+        expectRefusedLogin($this);
+
+        expect($newcomer->refresh()->passkey_user_handle)->toBeNull();
+    });
+
+    it('refuses an owner whose stored handle has changed', function (): void {
+        $this->member->forceFill(['passkey_user_handle' => Base64Url::encode(random_bytes(32))])->save();
+
+        expectRefusedLogin($this);
+    });
+
+    it('refuses a soft-deleted owner on its own handle too', function (): void {
+        $options = Passkeys::for($this->member)->authenticationOptions();
+        $this->member->delete();
+
+        expect(fn () => Passkeys::for($this->member)->authenticate($this->authenticator->assert($options)))
+            ->toThrow(CredentialNotFound::class);
+    });
+});
+
+it('asks a custom HasPasskeys owner for its handle through the contract', function (): void {
+    Schema::create('contract_owners', function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+        $table->string('email')->nullable();
+        $table->string('opaque_handle')->nullable();
+        $table->timestamps();
+    });
+
+    $owner = ContractOwner::query()->create([
+        'name' => 'Lin',
+        'email' => 'lin@example.com',
+        'opaque_handle' => Base64Url::encode(random_bytes(32)),
+    ]);
+    $authenticator = VirtualAuthenticator::es256();
+    Passkeys::for($owner)->register($authenticator->register(Passkeys::for($owner)->registrationOptions()));
+
+    expect(Passkeys::authenticate($authenticator->assert(Passkeys::authenticationOptions()))->authenticatable->is($owner))->toBeTrue();
+
+    $owner->forceFill(['opaque_handle' => Base64Url::encode(random_bytes(32))])->save();
+
+    expect(fn () => Passkeys::authenticate($authenticator->assert(Passkeys::authenticationOptions())))
+        ->toThrow(CredentialNotFound::class);
 });
 
 function Base64UrlHandle(Passkey $passkey): string
