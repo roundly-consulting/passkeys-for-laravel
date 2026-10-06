@@ -6,8 +6,20 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+### Changed
+
+- `Passkeys::fake()`: a host test that signs in under the fake with a passkey whose owner was deleted
+  or soft-deleted, or whose owner holds another user handle, or with a `Passkey::factory()->create()`
+  passkey that has no real owner, now gets `CredentialNotFound` (and a recorded failed
+  authentication), as in production. Seed the passkey with
+  `Passkey::factory()->forAuthenticatable($user)`. The passkey the fake invents when nothing is
+  seeded still signs in.
+
 ### Fixed
 
+- `Passkeys::fake()` now refuses a passkey its owner no longer holds, through the same owner check
+  as the real verifier, for both the `authenticatesAs()` passkey and the last fake-registered one.
+  A host can now test that a deleted or soft-deleted account can't sign in under the fake.
 - `Passkey::factory()->forAuthenticatable($model)` now gives the passkey the model's user handle when
   the model implements `HasPasskeys` (minting the handle if the model has none yet), as a real
   registration does. Before, a seeded passkey carried a random handle its owner did not hold. Other

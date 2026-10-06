@@ -27,6 +27,7 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Support\CredentialOwner;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 use RoundlyConsulting\Passkeys\UserPasskeys;
 
@@ -41,7 +42,11 @@ use RoundlyConsulting\Passkeys\UserPasskeys;
  * fires `PasskeyRegistered`; a successful authenticate() stamps `last_used_at` and
  * fires `PasskeyAuthenticated` — through the container's event dispatcher, so the
  * host's listeners run unless the test wraps them in `Event::fake()`. A programmed
- * failure writes and fires nothing. A revoked (or unsaved) passkey is refused.
+ * failure writes and fires nothing. A revoked (or unsaved) passkey is refused, and so
+ * is one whose owner no longer holds it — deleted, soft-deleted, or holding another
+ * user handle — through the real verifier's own owner check. The one exemption is the
+ * passkey the fake invents when nothing is seeded, which stands for "any valid
+ * credential".
  *
  * `rename()` / `revoke()` run the real, ownership-checked actions (writes and
  * events included) and are recorded once they succeed. Reads (`all`, `find`,
@@ -138,7 +143,9 @@ final class PasskeysFake implements PasskeyService
 
     /**
      * Make authenticate() return this exact credential — refused, like the real
-     * service, once it is revoked or when it was never saved.
+     * service, once it is revoked, when it was never saved, or when its owner no
+     * longer holds it. Seed it with `Passkey::factory()->forAuthenticatable($user)`,
+     * which gives it the user's handle.
      */
     public function authenticatesAs(Passkey $passkey): self
     {
@@ -299,20 +306,30 @@ final class PasskeysFake implements PasskeyService
 
     /**
      * The programmed authentication outcome, recorded; a success stamps usage and
-     * fires `PasskeyAuthenticated`.
+     * fires `PasskeyAuthenticated`. The passkey must pass the real verifier's checks
+     * that need no crypto: still stored and not revoked, held by its owner, and
+     * meeting the expectation — in that order.
      *
      * @internal called by the recording handle
      */
     public function fakeAuthenticate(?AuthenticationExpectation $expect = null): Passkey
     {
-        $passkey = $this->acceptsAuthentication
-            ? $this->authenticatesAs ?? $this->lastRegisteredPasskey()
-            : null;
+        if (! $this->acceptsAuthentication) {
+            throw $this->failedAuthentication();
+        }
 
-        if ($passkey === null || ! self::isActive($passkey) || ($expect !== null && ! $expect->matches($passkey))) {
-            $this->authentications[] = ['passkey' => null, 'success' => false];
+        $passkey = $this->authenticatesAs ?? $this->lastRegisteredPasskey();
 
-            throw CredentialNotFound::make();
+        // Nothing seeded: the fake invents "any valid credential". That passkey is the
+        // one exemption from the owner check — its factory owner is a placeholder, not
+        // an account. Every passkey a test hands over or registers is checked.
+        $invented = $passkey === null;
+        $passkey ??= self::inventPasskey();
+
+        if (! self::isActive($passkey)
+            || (! $invented && ! self::ownerHolds($passkey))
+            || ($expect !== null && ! $expect->matches($passkey))) {
+            throw $this->failedAuthentication();
         }
 
         // Stamped like a real sign-in (`last_used_at`); the counter is not moved.
@@ -323,6 +340,13 @@ final class PasskeysFake implements PasskeyService
         $this->authentications[] = ['passkey' => $passkey, 'success' => true];
 
         return $passkey;
+    }
+
+    private function failedAuthentication(): CredentialNotFound
+    {
+        $this->authentications[] = ['passkey' => null, 'success' => false];
+
+        return CredentialNotFound::make();
     }
 
     /**
@@ -483,14 +507,26 @@ final class PasskeysFake implements PasskeyService
         return $passkey->exists && PasskeyModel::query()->whereKey($passkey->getKey())->exists();
     }
 
-    private function lastRegisteredPasskey(): Passkey
+    /**
+     * The real verifier's owner check ({@see CredentialOwner::holds()}): the owner
+     * still exists, is not soft-deleted, and still holds the passkey's user handle.
+     * An owner type that names no model (the factory's default `user`) is refused as
+     * a missing owner, never a class-not-found error.
+     */
+    private static function ownerHolds(Passkey $passkey): bool
+    {
+        return CredentialOwner::resolvable($passkey) && CredentialOwner::holds($passkey);
+    }
+
+    private function lastRegisteredPasskey(): ?Passkey
     {
         $last = end($this->registrations);
 
-        if ($last !== false) {
-            return $last['passkey'];
-        }
+        return $last === false ? null : $last['passkey'];
+    }
 
+    private static function inventPasskey(): Passkey
+    {
         /** @var Passkey $passkey */
         $passkey = Passkey::factory()->es256()->create();
 

@@ -11,7 +11,9 @@ use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 
 /**
- * The one owner check: whether the account a passkey belongs to still holds it.
+ * The one owner check: whether the account a passkey belongs to still holds it. The
+ * real verifier and `Passkeys::fake()` both ask here, so the fake refuses exactly the
+ * passkeys production refuses.
  *
  * @internal
  */
@@ -39,6 +41,20 @@ final class CredentialOwner
         }
 
         return ! $owner instanceof HasPasskeys || ConstantTime::equals(self::storedHandle($owner), $passkey->user_handle);
+    }
+
+    /**
+     * Whether the passkey's owner type names an Eloquent model, directly or through
+     * the morph map, so {@see holds()} can resolve it. Only `Passkeys::fake()` asks
+     * first: a factory passkey's default owner type `user` names no class, and the
+     * fake refuses it as a missing owner. The real verifier does not, so a stored row
+     * whose owner type no longer resolves still fails loudly as a misconfiguration.
+     */
+    public static function resolvable(Passkey $passkey): bool
+    {
+        $class = $passkey::getActualClassNameForMorph($passkey->authenticatable_type);
+
+        return class_exists($class) && is_subclass_of($class, Model::class);
     }
 
     private static function storedHandle(Model&HasPasskeys $owner): string
