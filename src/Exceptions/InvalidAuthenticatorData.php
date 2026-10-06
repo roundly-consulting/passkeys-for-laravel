@@ -38,6 +38,15 @@ final class InvalidAuthenticatorData extends PasskeyException
     }
 
     /**
+     * WebAuthn L3 §7.1: a relying party fails a registration whose credential id is
+     * longer than 1023 bytes.
+     */
+    public static function credentialIdTooLong(): self
+    {
+        return new self(self::trans('credential_id_too_long'));
+    }
+
+    /**
      * The byte structure failed to parse.
      *
      * @param  string  $reason  the crypto layer's own, untranslated account — kept for

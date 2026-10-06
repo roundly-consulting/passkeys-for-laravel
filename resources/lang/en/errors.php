@@ -9,6 +9,7 @@ return [
     'backup_state_inconsistent' => 'The credential backup-state flags are inconsistent.',
     'backup_eligibility_changed' => 'The authenticator reported a different backup eligibility (BE flag) than the credential was registered with; a credential\'s backup eligibility never changes.',
     'attested_data_missing' => 'The registration response is missing attested credential data.',
+    'credential_id_too_long' => 'The credential ID is longer than 1023 bytes.',
     'challenge_mismatch' => 'The challenge does not match the one issued for this ceremony.',
     'challenge_user_mismatch' => 'The challenge was issued for a different user.',
     'challenge_ceremony_type' => 'The challenge was issued for a different ceremony type.',

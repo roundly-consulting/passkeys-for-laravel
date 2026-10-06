@@ -34,6 +34,7 @@ it('resolves translated, non-empty messages for the simple factories', function 
     'user presence missing' => [fn () => InvalidAuthenticatorData::userPresenceMissing()],
     'backup state inconsistent' => [fn () => InvalidAuthenticatorData::backupStateInconsistent()],
     'attested data missing' => [fn () => InvalidAuthenticatorData::attestedDataMissing()],
+    'credential id too long' => [fn () => InvalidAuthenticatorData::credentialIdTooLong()],
     'invalid client data' => [fn () => InvalidClientData::malformed()],
     'origin mismatch' => [fn () => OriginMismatch::make()],
     'cross origin' => [fn () => OriginMismatch::crossOrigin()],

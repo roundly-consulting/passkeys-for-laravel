@@ -9,6 +9,7 @@ return [
     'backup_state_inconsistent' => 'Príznaky stavu zálohy poverenia si navzájom odporujú.',
     'backup_eligibility_changed' => 'Autentifikátor nahlásil inú spôsobilosť na zálohovanie (príznak BE), než s akou bolo poverenie zaregistrované; spôsobilosť poverenia na zálohovanie sa nikdy nemení.',
     'attested_data_missing' => 'V odpovedi na registráciu chýbajú atestované údaje poverenia.',
+    'credential_id_too_long' => 'ID poverenia je dlhšie ako 1023 bajtov.',
     'challenge_mismatch' => 'Výzva sa nezhoduje s výzvou vydanou pre túto ceremóniu.',
     'challenge_user_mismatch' => 'Výzva bola vydaná pre iného používateľa.',
     'challenge_ceremony_type' => 'Výzva bola vydaná pre iný typ ceremónie.',

@@ -46,6 +46,8 @@ use RoundlyConsulting\Passkeys\Support\PasskeyModel;
  */
 final readonly class VerifyRegistrationAction
 {
+    private const int MAX_CREDENTIAL_ID_BYTES = 1023;
+
     private Digest $digest;
 
     public function __construct(
@@ -110,6 +112,11 @@ final readonly class VerifyRegistrationAction
         // §7.1.16 — attested credential data + a supported, offered algorithm.
         if ($parsed->coseKey === null || $parsed->credentialId === null || $parsed->coseKeyBytes === null) {
             throw InvalidAuthenticatorData::attestedDataMissing();
+        }
+
+        // L3 §7.1 — a credential id over 1023 bytes fails the ceremony.
+        if (strlen($parsed->credentialId) > self::MAX_CREDENTIAL_ID_BYTES) {
+            throw InvalidAuthenticatorData::credentialIdTooLong();
         }
 
         // The algorithm is read off the credential's own key and held against the

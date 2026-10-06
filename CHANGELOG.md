@@ -25,6 +25,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `OriginMismatch`, and a spaced AAGUID refused that authenticator with `AttestationUntrusted`.
 - Two registrations racing with the same credential id: the losing request now gets
   `CredentialAlreadyRegistered` instead of an `Illuminate\Database\UniqueConstraintViolationException`.
+- A registration whose credential id is longer than 1023 bytes is now refused with
+  `InvalidAuthenticatorData` (WebAuthn Level 3 §7.1), in English and Slovak, instead of being stored.
 
 ## 1.0.2 - 2026-10-04
 

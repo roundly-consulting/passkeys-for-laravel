@@ -263,6 +263,18 @@ it('registers a long roaming-key credential id end to end', function (): void {
     expect(fn () => register($this->user, $vectors))->toThrow(CredentialAlreadyRegistered::class);
 });
 
+it('refuses a credential id longer than 1023 bytes and stores nothing', function (int $bytes): void {
+    $vectors = WebAuthnVectors::es256()->withCredentialId(random_bytes($bytes));
+
+    expect(fn () => register($this->user, $vectors))
+        ->toThrow(InvalidAuthenticatorData::class, 'The credential ID is longer than 1023 bytes.')
+        ->and(Passkey::query()->withTrashed()->count())->toBe(0);
+})->with([
+    'one byte over' => [1024],
+    'four thousand' => [4000],
+    'the length field maximum' => [65535],
+]);
+
 /**
  * Two ceremonies carrying one credential id race past the duplicate pre-check: the winner
  * commits between the loser's check and its insert. The `creating` hook plays the winner.
