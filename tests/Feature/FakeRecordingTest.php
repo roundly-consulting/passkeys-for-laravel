@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Carbon;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
@@ -136,6 +137,24 @@ it('refuses a trashed or unsaved authenticatesAs() passkey under the fake', func
     $fake->assertAuthenticationFailed();
     $fake->assertAuthenticationCount(2);
     expect(fn () => $fake->assertAuthenticated())->toThrow(PasskeyAssertionFailed::class);
+});
+
+it('stamps usage on a fake sign-in and none on a fake registration, as the real ceremonies do', function (): void {
+    Carbon::setTestNow('2026-10-06 12:00:00');
+    Passkeys::fake();
+
+    $passkey = Passkeys::for($this->alice)->register(recordingResponse());
+
+    expect($passkey->last_used_at)->toBeNull()
+        ->and($passkey->fresh()?->last_used_at)->toBeNull();
+
+    Carbon::setTestNow('2026-10-06 12:05:00');
+    $signedIn = Passkeys::for($this->alice)->authenticate(recordingAssertion());
+
+    expect($signedIn->last_used_at?->toDateTimeString())->toBe('2026-10-06 12:05:00')
+        ->and($passkey->fresh()?->last_used_at?->toDateTimeString())->toBe('2026-10-06 12:05:00');
+
+    Carbon::setTestNow();
 });
 
 it('builds the fake from the container', function (): void {

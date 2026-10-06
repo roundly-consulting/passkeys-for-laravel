@@ -219,9 +219,11 @@ final class PasskeysFake implements PasskeyService
             throw $this->registrationError;
         }
 
+        // Never used yet, like a real registration: only a sign-in stamps usage.
         $passkey = Passkey::factory()->es256()->make([
             'user_handle' => $user->passkeyUserHandle(),
             'name' => $name,
+            'last_used_at' => null,
         ]);
 
         $user->passkeys()->save($passkey);
@@ -263,6 +265,9 @@ final class PasskeysFake implements PasskeyService
 
             throw CredentialNotFound::make();
         }
+
+        // Stamped like a real sign-in (`last_used_at`); the counter is not moved.
+        $passkey->recordUsage($passkey->backup_state);
 
         $this->authentications[] = ['passkey' => $passkey, 'success' => true];
 

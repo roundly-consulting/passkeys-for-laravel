@@ -16,6 +16,9 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   records a failed authentication, as the real service does. That includes a passkey handed to
   `authenticatesAs()` that is soft-deleted or was never saved, so a test that passes an unsaved
   `Passkey::factory()->make()` to `authenticatesAs()` now has to `create()` it.
+- `Passkeys::fake()`: a fake `register()` now stores the passkey with `last_used_at` `null`, as a
+  real registration does, and a successful fake `authenticate()` stamps `last_used_at`. A test that
+  read a fresh fake passkey as "used" will notice.
 
 ### Fixed
 
@@ -33,6 +36,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `InvalidAuthenticatorData` (WebAuthn Level 3 §7.1), in English and Slovak, instead of being stored.
 - `Passkeys::fake()` no longer signs in with a revoked passkey, so a host can test that a revoked
   key can't sign in.
+- `Passkeys::fake()` now tracks `last_used_at` like the real ceremonies, so a "last used" display can
+  be tested under the fake.
 
 ## 1.0.2 - 2026-10-04
 
