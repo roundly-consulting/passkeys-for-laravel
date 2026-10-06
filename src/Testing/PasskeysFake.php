@@ -25,6 +25,7 @@ use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyException;
 use RoundlyConsulting\Passkeys\Models\Passkey;
+use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 use RoundlyConsulting\Passkeys\UserPasskeys;
 
 /**
@@ -128,7 +129,8 @@ final class PasskeysFake implements PasskeyService
     }
 
     /**
-     * Make authenticate() return this exact credential.
+     * Make authenticate() return this exact credential — refused, like the real
+     * service, once it is revoked or when it was never saved.
      */
     public function authenticatesAs(Passkey $passkey): self
     {
@@ -256,7 +258,7 @@ final class PasskeysFake implements PasskeyService
             ? $this->authenticatesAs ?? $this->lastRegisteredPasskey()
             : null;
 
-        if ($passkey === null || ($expect !== null && ! $expect->matches($passkey))) {
+        if ($passkey === null || ! self::isActive($passkey) || ($expect !== null && ! $expect->matches($passkey))) {
             $this->authentications[] = ['passkey' => null, 'success' => false];
 
             throw CredentialNotFound::make();
@@ -413,6 +415,16 @@ final class PasskeysFake implements PasskeyService
     {
         return $passkey->authenticatable_type === $user->getMorphClass()
             && (string) $passkey->authenticatable_id === (string) $user->getKey();
+    }
+
+    /**
+     * Still stored and not revoked — re-read through the configured model, as the real
+     * verifier locates a credential, so a passkey revoked (or never saved) since it was
+     * registered or handed to authenticatesAs() is refused.
+     */
+    private static function isActive(Passkey $passkey): bool
+    {
+        return $passkey->exists && PasskeyModel::query()->whereKey($passkey->getKey())->exists();
     }
 
     private function lastRegisteredPasskey(): Passkey

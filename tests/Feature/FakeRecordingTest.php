@@ -109,6 +109,35 @@ it('refuses cross-account writes under the fake and records nothing', function (
     expect($bobs->refresh()->trashed())->toBeFalse();
 });
 
+it('refuses a revoked passkey under the fake, as the real service does', function (): void {
+    $fake = Passkeys::fake();
+    $passkey = Passkeys::for($this->alice)->register(recordingResponse());
+    Passkeys::for($this->alice)->revoke($passkey->getKey());
+
+    expect(fn () => Passkeys::for($this->alice)->authenticate(recordingAssertion()))->toThrow(CredentialNotFound::class)
+        ->and(fn () => Passkeys::authenticate(recordingAssertion()))->toThrow(CredentialNotFound::class);
+
+    $fake->assertAuthenticationFailed();
+    $fake->assertAuthenticationCount(2);
+    expect(fn () => $fake->assertAuthenticated())->toThrow(PasskeyAssertionFailed::class);
+});
+
+it('refuses a trashed or unsaved authenticatesAs() passkey under the fake', function (): void {
+    $fake = Passkeys::fake();
+    $trashed = Passkey::factory()->forAuthenticatable($this->alice)->create();
+    $trashed->delete();
+
+    $fake->authenticatesAs($trashed);
+    expect(fn () => Passkeys::authenticate(recordingAssertion()))->toThrow(CredentialNotFound::class);
+
+    $fake->authenticatesAs(Passkey::factory()->forAuthenticatable($this->alice)->make());
+    expect(fn () => Passkeys::authenticate(recordingAssertion()))->toThrow(CredentialNotFound::class);
+
+    $fake->assertAuthenticationFailed();
+    $fake->assertAuthenticationCount(2);
+    expect(fn () => $fake->assertAuthenticated())->toThrow(PasskeyAssertionFailed::class);
+});
+
 it('builds the fake from the container', function (): void {
     expect(app(PasskeysFake::class)->for($this->alice)->count())->toBe(0);
 });

@@ -12,6 +12,10 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `CredentialNotFound`, a passkey whose owner was deleted or soft-deleted, or whose owner's stored
   user handle no longer matches the passkey's. An app that let soft-deleted accounts sign in with a
   passkey will notice.
+- `Passkeys::fake()`: `authenticate()` now refuses a revoked passkey with `CredentialNotFound` and
+  records a failed authentication, as the real service does. That includes a passkey handed to
+  `authenticatesAs()` that is soft-deleted or was never saved, so a test that passes an unsaved
+  `Passkey::factory()->make()` to `authenticatesAs()` now has to `create()` it.
 
 ### Fixed
 
@@ -27,6 +31,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `CredentialAlreadyRegistered` instead of an `Illuminate\Database\UniqueConstraintViolationException`.
 - A registration whose credential id is longer than 1023 bytes is now refused with
   `InvalidAuthenticatorData` (WebAuthn Level 3 §7.1), in English and Slovak, instead of being stored.
+- `Passkeys::fake()` no longer signs in with a revoked passkey, so a host can test that a revoked
+  key can't sign in.
 
 ## 1.0.2 - 2026-10-04
 
