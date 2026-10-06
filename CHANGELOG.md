@@ -23,6 +23,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `passkeys.origins` / `passkeys.aaguids.allowed` arrays, are now trimmed. Before,
   `"https://example.com, https://www.example.com"` refused every ceremony from the second origin with
   `OriginMismatch`, and a spaced AAGUID refused that authenticator with `AttestationUntrusted`.
+- Two registrations racing with the same credential id: the losing request now gets
+  `CredentialAlreadyRegistered` instead of an `Illuminate\Database\UniqueConstraintViolationException`.
 
 ## 1.0.2 - 2026-10-04
 

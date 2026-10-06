@@ -263,6 +263,26 @@ it('registers a long roaming-key credential id end to end', function (): void {
     expect(fn () => register($this->user, $vectors))->toThrow(CredentialAlreadyRegistered::class);
 });
 
+/**
+ * Two ceremonies carrying one credential id race past the duplicate pre-check: the winner
+ * commits between the loser's check and its insert. The `creating` hook plays the winner.
+ */
+it('refuses the loser of a duplicate-credential race as already registered', function (): void {
+    Event::fake([PasskeyRegistered::class]);
+    $vectors = WebAuthnVectors::es256();
+
+    Passkey::creating(function (Passkey $loser): void {
+        Passkey::withoutEvents(fn (): Passkey => Passkey::factory()
+            ->forAuthenticatable($this->user)
+            ->withCredentialId($loser->credential_id)
+            ->create());
+    });
+
+    expect(fn () => register($this->user, $vectors))->toThrow(CredentialAlreadyRegistered::class)
+        ->and(Passkey::query()->count())->toBe(1);
+    Event::assertNotDispatched(PasskeyRegistered::class);
+});
+
 it('refuses a wire fmt that is not a WebAuthn format identifier, under the default ignore trust too', function (string $format): void {
     expect(fn () => register($this->user, WebAuthnVectors::es256(), ['fmt' => $format]))
         ->toThrow(InvalidClientData::class);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Actions;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\UniqueConstraintViolationException;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Cose\AuthenticatorData;
 use RoundlyConsulting\Crypto\Hash\ConstantTime;
@@ -123,14 +124,19 @@ final readonly class VerifyRegistrationAction
         // the trust gate: what it accepts is policy, configured, not decided here.
         $result = $this->attestation->verify($attestation, $parsed, $clientDataHash);
 
-        // §7.1.22 — the credential id must not already be registered.
+        // §7.1.22 — the credential id must not already be registered. The pre-check is
+        // the fast path; the unique index decides a race between two ceremonies.
         $credentialId = Base64Url::encode($parsed->credentialId);
 
         if (PasskeyModel::query()->forCredentialId($credentialId)->withTrashed()->exists()) {
             throw CredentialAlreadyRegistered::make();
         }
 
-        $passkey = $this->persist($user, $response, $parsed, $credentialId, $result, $name);
+        try {
+            $passkey = $this->persist($user, $response, $parsed, $credentialId, $result, $name);
+        } catch (UniqueConstraintViolationException) {
+            throw CredentialAlreadyRegistered::make();
+        }
 
         $this->events->dispatch(new PasskeyRegistered($passkey));
 
