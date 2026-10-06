@@ -6,6 +6,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+## 1.1.1 - 2026-10-06
+
 ### Changed
 
 - `Passkeys::fake()`: a host test that signs in under the fake with a passkey whose owner was deleted
