@@ -8,9 +8,13 @@ use JsonSerializable;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
 /**
- * PublicKeyCredentialRequestOptions, serialised to the exact JSON shape
- * `navigator.credentials.get({ publicKey })` expects. An empty allowCredentials
- * list means a discoverable (usernameless) login.
+ * PublicKeyCredentialRequestOptions, serialised to the WebAuthn JSON form
+ * (`PublicKeyCredentialRequestOptionsJSON`, binary members base64url-encoded)
+ * under `publicKey`. The browser takes it through
+ * `PublicKeyCredential.parseRequestOptionsFromJSON()` before
+ * `navigator.credentials.get()`, and echoes the ceremony id back with the
+ * response. An empty allowCredentials list means a discoverable (usernameless)
+ * login.
  */
 final readonly class RequestOptionsData implements JsonSerializable
 {

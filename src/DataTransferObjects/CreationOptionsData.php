@@ -12,10 +12,12 @@ use RoundlyConsulting\Passkeys\Enums\ResidentKey;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
 
 /**
- * PublicKeyCredentialCreationOptions, serialised to the exact JSON shape
- * `navigator.credentials.create({ publicKey })` expects (binary members
- * base64url-encoded). The ceremony id travels alongside so a stateless host can
- * echo it back with the registration response.
+ * PublicKeyCredentialCreationOptions, serialised to the WebAuthn JSON form
+ * (`PublicKeyCredentialCreationOptionsJSON`, binary members base64url-encoded)
+ * under `publicKey`. The browser takes it through
+ * `PublicKeyCredential.parseCreationOptionsFromJSON()` before
+ * `navigator.credentials.create()`. The ceremony id travels alongside so a
+ * stateless host can echo it back with the registration response.
  */
 final readonly class CreationOptionsData implements JsonSerializable
 {

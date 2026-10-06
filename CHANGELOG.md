@@ -30,6 +30,9 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   `excludeCredentials` / `allowCredentials` for `Passkeys::for($user)`. A test that asserted the old
   fixed values will notice: the shipped config offers ES256 and RS256 (the fake offered ES256 only),
   and a changed `passkeys.timeout_ms`, `user_verification` or `resident_key` now shows.
+- Documentation: the README's browser steps now pass `options.publicKey` through
+  `PublicKeyCredential.parseCreationOptionsFromJSON()` / `parseRequestOptionsFromJSON()` and post the
+  credential back with the `ceremonyId`. Followed literally, the old steps failed every ceremony.
 
 ### Fixed
 

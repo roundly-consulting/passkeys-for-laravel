@@ -53,7 +53,7 @@ final class User extends Authenticatable implements HasPasskeys
 Schema::table('users', fn (Blueprint $table) => $table->passkeyUserHandle());
 ```
 
-Register a passkey: send the options to `navigator.credentials.create()`, then verify the response:
+Register a passkey: return the options, then verify what the browser posts back:
 
 ```php
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
@@ -67,7 +67,20 @@ $passkey = Passkeys::for($user)->register(
 );
 ```
 
-Sign in without a username: send the options to `navigator.credentials.get()`, then verify:
+In the browser, pass `options.publicKey` through `PublicKeyCredential.parseCreationOptionsFromJSON()`
+into `navigator.credentials.create()`, then POST the credential with the `ceremonyId`:
+
+```js
+const options = await (await fetch('/passkeys/options')).json();
+const credential = await navigator.credentials.create({
+    publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(options.publicKey),
+});
+await fetch('/passkeys', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...credential.toJSON(), ceremonyId: options.ceremonyId }) });
+```
+
+Sign in without a username: the same with `parseRequestOptionsFromJSON()` and
+`navigator.credentials.get()`, then verify:
 
 ```php
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
