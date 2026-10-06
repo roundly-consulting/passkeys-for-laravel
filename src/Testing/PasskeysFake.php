@@ -322,12 +322,13 @@ final class PasskeysFake implements PasskeyService
 
         // Nothing seeded: the fake invents "any valid credential". That passkey is the
         // one exemption from the owner check — its factory owner is a placeholder, not
-        // an account. Every passkey a test hands over or registers is checked.
+        // an account. Every passkey a test hands over or registers is checked, through
+        // the real verifier's owner check.
         $invented = $passkey === null;
         $passkey ??= self::inventPasskey();
 
         if (! self::isActive($passkey)
-            || (! $invented && ! self::ownerHolds($passkey))
+            || (! $invented && ! CredentialOwner::holds($passkey))
             || ($expect !== null && ! $expect->matches($passkey))) {
             throw $this->failedAuthentication();
         }
@@ -505,17 +506,6 @@ final class PasskeysFake implements PasskeyService
     private static function isActive(Passkey $passkey): bool
     {
         return $passkey->exists && PasskeyModel::query()->whereKey($passkey->getKey())->exists();
-    }
-
-    /**
-     * The real verifier's owner check ({@see CredentialOwner::holds()}): the owner
-     * still exists, is not soft-deleted, and still holds the passkey's user handle.
-     * An owner type that names no model (the factory's default `user`) is refused as
-     * a missing owner, never a class-not-found error.
-     */
-    private static function ownerHolds(Passkey $passkey): bool
-    {
-        return CredentialOwner::resolvable($passkey) && CredentialOwner::holds($passkey);
     }
 
     private function lastRegisteredPasskey(): ?Passkey

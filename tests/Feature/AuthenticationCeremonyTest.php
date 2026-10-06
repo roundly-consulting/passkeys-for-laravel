@@ -10,6 +10,7 @@ use RoundlyConsulting\Passkeys\Actions\GenerateAuthenticationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\GenerateRegistrationOptionsAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyAuthenticationAction;
 use RoundlyConsulting\Passkeys\Actions\VerifyRegistrationAction;
+use RoundlyConsulting\Passkeys\Contracts\ChallengeRepository;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
@@ -287,6 +288,28 @@ describe('a credential whose owner no longer holds it', function (): void {
         expect(fn () => Passkeys::for($this->member)->authenticate($this->authenticator->assert($options)))
             ->toThrow(CredentialNotFound::class);
     });
+
+    // A host renamed its account class or changed its morph map: old rows still name
+    // the old owner type. Refused like any other miss, never a raw class-not-found Error.
+    it('refuses a credential whose owner type no longer resolves', function (string $type): void {
+        $this->passkey->forceFill(['authenticatable_type' => $type])->save();
+        Event::fake([PasskeyAuthenticated::class]);
+        $options = Passkeys::authenticationOptions();
+
+        expect(fn () => Passkeys::authenticate($this->authenticator->assert($options)))
+            ->toThrow(CredentialNotFound::class, CredentialNotFound::make()->getMessage());
+
+        $after = Passkey::query()->findOrFail($this->passkey->getKey());
+
+        expect($after->sign_count)->toBe($this->passkey->sign_count)
+            ->and($after->last_used_at)->toBeNull()
+            ->and(app(ChallengeRepository::class)->pull($options->ceremonyId))->not->toBeNull();
+        Event::assertNotDispatched(PasskeyAuthenticated::class);
+    })->with([
+        'a renamed class' => 'App\Models\RetiredMember',
+        'a morph alias no longer mapped' => 'retired-member',
+        'a class that is no model' => stdClass::class,
+    ]);
 });
 
 it('asks a custom HasPasskeys owner for its handle through the contract', function (): void {

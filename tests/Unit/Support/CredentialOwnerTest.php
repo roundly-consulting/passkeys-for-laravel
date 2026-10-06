@@ -17,16 +17,27 @@ afterEach(function (): void {
 });
 
 it('resolves an owner type given as a class or through the morph map', function (): void {
-    Relation::morphMap(['account' => User::class]);
+    $user = User::query()->create(['name' => 'Grace', 'email' => 'grace@example.com']);
+    $passkey = Passkey::factory()->forAuthenticatable($user)->create();
 
-    expect(CredentialOwner::resolvable(Passkey::factory()->make(['authenticatable_type' => User::class])))->toBeTrue()
-        ->and(CredentialOwner::resolvable(Passkey::factory()->make(['authenticatable_type' => 'account'])))->toBeTrue();
+    expect($passkey->authenticatable_type)->toBe(User::class)
+        ->and(CredentialOwner::holds($passkey))->toBeTrue();
+
+    Relation::morphMap(['account' => User::class]);
+    $passkey->forceFill(['authenticatable_type' => 'account'])->save();
+
+    expect(CredentialOwner::holds($passkey))->toBeTrue();
 });
 
-it('does not resolve an owner type that names no model', function (string $type): void {
-    expect(CredentialOwner::resolvable(Passkey::factory()->make(['authenticatable_type' => $type])))->toBeFalse();
+it('refuses an owner type that names no model, without resolving it', function (string $type): void {
+    $user = User::query()->create(['name' => 'Grace', 'email' => 'grace@example.com']);
+    $passkey = Passkey::factory()->forAuthenticatable($user)->create();
+    $passkey->forceFill(['authenticatable_type' => $type])->save();
+
+    expect(CredentialOwner::holds($passkey))->toBeFalse();
 })->with([
     'the factory default' => 'user',
+    'a missing class' => 'App\\Models\\RetiredUser',
     'a class that is no model' => stdClass::class,
 ]);
 

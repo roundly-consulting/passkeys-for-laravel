@@ -14,6 +14,10 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   authentication), as in production. Seed the passkey with
   `Passkey::factory()->forAuthenticatable($user)`. The passkey the fake invents when nothing is
   seeded still signs in.
+- `Passkeys::authenticate()` and `Passkeys::for($user)->authenticate()` now refuse a passkey whose
+  stored owner type no longer resolves to a model (a renamed account class, or a morph alias dropped
+  from the morph map) with `CredentialNotFound`, instead of a raw `Error`. Fix the morph map (map the
+  old type to the current class) to restore those passkeys.
 
 ### Fixed
 
@@ -24,6 +28,10 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   the model implements `HasPasskeys` (minting the handle if the model has none yet), as a real
   registration does. Before, a seeded passkey carried a random handle its owner did not hold. Other
   models keep the random handle and are left untouched.
+- Signing in with a passkey whose owner type no longer resolves (for example after renaming the user
+  model or changing the morph map) no longer fails with a raw `Class "…" not found` error (a 500).
+  The passkey is refused like any other unknown credential, before the ceremony's challenge is used,
+  so the counter is untouched and the sign-in can be retried with another passkey.
 
 ## 1.1.0 - 2026-10-06
 

@@ -145,8 +145,9 @@ final readonly class VerifyAuthenticationAction
 
     /**
      * The owner must still exist and still hold the handle the credential was minted
-     * for ({@see CredentialOwner::holds()}). Checked before the challenge is pulled,
-     * with the uniform miss.
+     * for ({@see CredentialOwner::holds()}); an owner type that no longer resolves to
+     * a model counts as a missing owner. Checked before the challenge is pulled, with
+     * the uniform miss.
      */
     private function assertOwnerHoldsCredential(Passkey $passkey): void
     {

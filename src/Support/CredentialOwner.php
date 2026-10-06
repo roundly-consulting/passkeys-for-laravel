@@ -29,9 +29,17 @@ final class CredentialOwner
      * concern would mint a handle for an account that has none, and a fresh random
      * handle can never match anyway. Any other implementation is asked through the
      * contract. An owner that is not `HasPasskeys` is checked for existence only.
+     *
+     * An owner type that no longer names a model — a renamed class, a morph alias
+     * dropped from the map, the factory's default `user` — is a missing owner: the
+     * passkey is refused, never a raw class-not-found `Error`.
      */
     public static function holds(Passkey $passkey): bool
     {
+        if (! self::resolvable($passkey)) {
+            return false;
+        }
+
         // Not `$passkey->authenticatable`: loading the relation would add the owner
         // to the returned passkey's array/JSON form.
         $owner = $passkey->authenticatable()->getResults();
@@ -45,12 +53,9 @@ final class CredentialOwner
 
     /**
      * Whether the passkey's owner type names an Eloquent model, directly or through
-     * the morph map, so {@see holds()} can resolve it. Only `Passkeys::fake()` asks
-     * first: a factory passkey's default owner type `user` names no class, and the
-     * fake refuses it as a missing owner. The real verifier does not, so a stored row
-     * whose owner type no longer resolves still fails loudly as a misconfiguration.
+     * the morph map — resolving the relation of one that does not throws.
      */
-    public static function resolvable(Passkey $passkey): bool
+    private static function resolvable(Passkey $passkey): bool
     {
         $class = $passkey::getActualClassNameForMorph($passkey->authenticatable_type);
 
