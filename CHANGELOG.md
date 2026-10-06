@@ -19,6 +19,10 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   passkey whose `authenticatable` was `null`, so `Auth::login($passkey->authenticatable)` failed. A
   new account that reuses a deleted account's id no longer signs in with that account's passkeys,
   and the check mints no user handle.
+- Spaces around the entries of `PASSKEYS_ORIGINS` and `PASSKEYS_AAGUIDS_ALLOWED`, or of the
+  `passkeys.origins` / `passkeys.aaguids.allowed` arrays, are now trimmed. Before,
+  `"https://example.com, https://www.example.com"` refused every ceremony from the second origin with
+  `OriginMismatch`, and a spaced AAGUID refused that authenticator with `AttestationUntrusted`.
 
 ## 1.0.2 - 2026-10-04
 

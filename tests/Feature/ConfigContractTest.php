@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use RoundlyConsulting\Passkeys\DataTransferObjects\PasskeyConfig;
+
 /**
  * The config contract, pinned in both directions:
  *
@@ -29,4 +31,27 @@ it('ships exactly the config keys it reads', function (): void {
         // and aboutData() reads a dozen leaves for real. Excluding it would discard readers
         // and gut the reverse direction.
     ]);
+});
+
+/**
+ * The two comma-separated env lists are split in the shipped file, so a space after a comma
+ * must not survive into the origin a ceremony is matched against.
+ */
+it('trims the comma-separated origin and aaguid env lists it ships', function (): void {
+    $_SERVER['PASSKEYS_ORIGINS'] = 'https://example.com, https://www.example.com';
+    $_SERVER['PASSKEYS_AAGUIDS_ALLOWED'] = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa, 11111111-1111-1111-1111-111111111111';
+
+    try {
+        /** @var array<string, mixed> $shipped */
+        $shipped = require __DIR__.'/../../config/passkeys.php';
+    } finally {
+        unset($_SERVER['PASSKEYS_ORIGINS'], $_SERVER['PASSKEYS_AAGUIDS_ALLOWED']);
+    }
+
+    $config = PasskeyConfig::fromArray($shipped);
+
+    expect($shipped['origins'])->toBe(['https://example.com', 'https://www.example.com'])
+        ->and($shipped['aaguids']['allowed'])->toBe(['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111'])
+        ->and($config->origins)->toBe(['https://example.com', 'https://www.example.com'])
+        ->and($config->allowedAaguids)->toBe(['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111']);
 });

@@ -146,6 +146,16 @@ it('normalises the aaguid allow-list to lowercase', function (): void {
         ->and(PasskeyConfig::fromArray([])->allowedAaguids)->toBe([]);
 });
 
+it('trims the entries of a configured origin and aaguid list', function (): void {
+    $config = PasskeyConfig::fromArray([
+        'origins' => ['https://a.test', ' https://b.test '],
+        'aaguids' => ['allowed' => [' ABCDEF01-1111-1111-1111-111111111111', "11111111-1111-1111-1111-111111111111\t"]],
+    ]);
+
+    expect($config->origins)->toBe(['https://a.test', 'https://b.test'])
+        ->and($config->allowedAaguids)->toBe(['abcdef01-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111']);
+});
+
 it('refuses a mistyped allow-list instead of reading it as allow-anything (strict config)', function (string $list, mixed $value): void {
     $config = $list === 'origins' ? ['origins' => $value] : ['aaguids' => ['allowed' => $value]];
 

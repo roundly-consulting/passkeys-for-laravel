@@ -267,7 +267,7 @@ final readonly class PasskeyConfig
     }
 
     /**
-     * A list of non-blank strings; `[]` when not set (absent, null or blank). A non-list,
+     * A list of non-blank, trimmed strings; `[]` when not set (absent, null or blank). A non-list,
      * or any entry that is not a non-blank string, throws — an allow-list must never
      * silently shrink to "allow anything".
      *
@@ -292,7 +292,8 @@ final readonly class PasskeyConfig
                 throw InvalidConfiguration::invalidValue($key, 'list_of_non_empty_strings', $item);
             }
 
-            $strings[] = $item;
+            // Trimmed: `in_array` matches strictly, so " https://b.test" would never match.
+            $strings[] = trim($item);
         }
 
         return $strings;

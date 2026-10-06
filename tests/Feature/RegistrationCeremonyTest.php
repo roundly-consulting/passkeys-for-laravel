@@ -116,6 +116,15 @@ it('rejects a disallowed origin', function (): void {
     register($this->user, WebAuthnVectors::es256(), ['origin' => 'https://evil.example']);
 })->throws(OriginMismatch::class);
 
+it('registers from an origin configured with surrounding spaces', function (): void {
+    config()->set('passkeys.origins', ['https://example.com', ' https://www.example.com']);
+    app()->forgetInstance(PasskeyConfig::class);
+
+    $passkey = register($this->user, WebAuthnVectors::es256(), ['origin' => 'https://www.example.com']);
+
+    expect($passkey->exists)->toBeTrue();
+});
+
 it('rejects a cross-origin ceremony by default', function (): void {
     register($this->user, WebAuthnVectors::es256(), ['crossOrigin' => true]);
 })->throws(OriginMismatch::class);

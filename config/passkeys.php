@@ -32,12 +32,13 @@ return [
     |--------------------------------------------------------------------------
     |
     | The exact clientData.origin values a ceremony may present, as a
-    | comma-separated list (e.g. "https://example.com,https://www.example.com").
+    | comma-separated list (e.g. "https://example.com, https://www.example.com";
+    | spaces around each entry are trimmed).
     | At least one origin must be configured before a ceremony can run.
     |
     */
     'origins' => array_values(array_filter(
-        explode(',', (string) env('PASSKEYS_ORIGINS', '')),
+        array_map('trim', explode(',', (string) env('PASSKEYS_ORIGINS', ''))),
     )),
 
     // Whether a cross-origin (iframe) ceremony is acceptable. Default: reject.
@@ -176,7 +177,7 @@ return [
     */
     'aaguids' => [
         'allowed' => array_values(array_filter(
-            explode(',', (string) env('PASSKEYS_AAGUIDS_ALLOWED', '')),
+            array_map('trim', explode(',', (string) env('PASSKEYS_AAGUIDS_ALLOWED', ''))),
         )),
     ],
 
