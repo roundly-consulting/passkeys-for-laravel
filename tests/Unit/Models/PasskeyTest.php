@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Carbon;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Tests\Support\Client;
+use RoundlyConsulting\Passkeys\Tests\Support\PlainOwner;
 use RoundlyConsulting\Passkeys\Tests\Support\User;
 
 it('persists a passkey through the factory', function (): void {
@@ -27,6 +28,40 @@ it('resolves the owning model through the morph relation', function (): void {
     $passkey = Passkey::factory()->forAuthenticatable($user)->create();
 
     expect($passkey->authenticatable->is($user))->toBeTrue();
+});
+
+it('gives a passkey seeded for an account that account\'s user handle', function (): void {
+    $user = User::query()->create(['name' => 'Edsger', 'email' => 'e@example.com']);
+
+    $passkey = Passkey::factory()->forAuthenticatable($user)->create();
+
+    expect($passkey->user_handle)->toBeString()->not->toBe('')
+        ->and($passkey->user_handle)->toBe($user->passkey_user_handle)
+        ->and($user->fresh()?->passkey_user_handle)->toBe($passkey->user_handle);
+});
+
+it('reuses the handle an account already holds when seeding its passkeys', function (): void {
+    $user = User::query()->create(['name' => 'Edsger', 'email' => 'e@example.com']);
+    $handle = $user->passkeyUserHandle();
+
+    $first = Passkey::factory()->forAuthenticatable($user)->create();
+    $second = Passkey::factory()->forAuthenticatable($user->fresh() ?? $user)->create();
+
+    expect($first->user_handle)->toBe($handle)
+        ->and($second->user_handle)->toBe($handle);
+});
+
+it('leaves an owner without HasPasskeys untouched and keeps a random handle', function (): void {
+    $owner = PlainOwner::query()->create(['name' => 'Plain', 'email' => 'p@example.com']);
+    $before = $owner->getAttributes();
+
+    $passkey = Passkey::factory()->forAuthenticatable($owner)->create();
+
+    expect($owner->getAttributes())->toBe($before)
+        ->and($owner->isDirty())->toBeFalse()
+        ->and($owner->fresh()?->passkey_user_handle)->toBeNull()
+        ->and($passkey->user_handle)->toMatch('/^[A-Za-z0-9_-]{43}$/')
+        ->and($passkey->authenticatable->is($owner))->toBeTrue();
 });
 
 it('scopes a query by credential id through its hash', function (): void {

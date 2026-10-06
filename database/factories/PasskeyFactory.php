@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Random\Bytes;
+use RoundlyConsulting\Passkeys\Contracts\HasPasskeys;
 use RoundlyConsulting\Passkeys\Models\Passkey;
 use RoundlyConsulting\Passkeys\Support\PasskeyModel;
 
@@ -94,11 +95,18 @@ final class PasskeyFactory extends Factory
         ]);
     }
 
+    /**
+     * State that hands the credential to `$model`. A `HasPasskeys` owner also gives it
+     * its user handle — minted on the model if it has none yet, as a real registration
+     * does — so the passkey is one its owner holds. Any other model keeps the random
+     * handle and is left untouched.
+     */
     public function forAuthenticatable(Model $model): self
     {
         return $this->state(fn (): array => [
             'authenticatable_type' => $model->getMorphClass(),
             'authenticatable_id' => $model->getKey(),
+            ...($model instanceof HasPasskeys ? ['user_handle' => $model->passkeyUserHandle()] : []),
         ]);
     }
 

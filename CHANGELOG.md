@@ -6,6 +6,13 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+### Fixed
+
+- `Passkey::factory()->forAuthenticatable($model)` now gives the passkey the model's user handle when
+  the model implements `HasPasskeys` (minting the handle if the model has none yet), as a real
+  registration does. Before, a seeded passkey carried a random handle its owner did not hold. Other
+  models keep the random handle and are left untouched.
+
 ## 1.1.0 - 2026-10-06
 
 ### Changed
