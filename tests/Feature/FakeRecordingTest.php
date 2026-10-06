@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Event;
 use RoundlyConsulting\Passkeys\Contracts\PasskeyService;
 use RoundlyConsulting\Passkeys\DataTransferObjects\AuthenticationResponseData;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationResponseData;
+use RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated;
+use RoundlyConsulting\Passkeys\Events\PasskeyRegistered;
+use RoundlyConsulting\Passkeys\Exceptions\CredentialAlreadyRegistered;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
 use RoundlyConsulting\Passkeys\Facades\Passkeys;
@@ -155,6 +159,30 @@ it('stamps usage on a fake sign-in and none on a fake registration, as the real 
         ->and($passkey->fresh()?->last_used_at?->toDateTimeString())->toBe('2026-10-06 12:05:00');
 
     Carbon::setTestNow();
+});
+
+it('fires the ceremony events from a fake register and authenticate, as the real ceremonies do', function (): void {
+    Event::fake([PasskeyRegistered::class, PasskeyAuthenticated::class]);
+    Passkeys::fake();
+
+    $passkey = Passkeys::for($this->alice)->register(recordingResponse());
+    $signedIn = Passkeys::for($this->alice)->authenticate(recordingAssertion());
+
+    Event::assertDispatchedTimes(PasskeyRegistered::class, 1);
+    Event::assertDispatched(PasskeyRegistered::class, fn (PasskeyRegistered $event): bool => $event->passkey->is($passkey));
+    Event::assertDispatchedTimes(PasskeyAuthenticated::class, 1);
+    Event::assertDispatched(PasskeyAuthenticated::class, fn (PasskeyAuthenticated $event): bool => $event->passkey->is($signedIn));
+});
+
+it('fires no ceremony event when the fake is programmed to fail', function (): void {
+    Event::fake([PasskeyRegistered::class, PasskeyAuthenticated::class]);
+    Passkeys::fake()->failRegistrationWith(CredentialAlreadyRegistered::make())->rejectAuthentication();
+
+    expect(fn () => Passkeys::for($this->alice)->register(recordingResponse()))->toThrow(CredentialAlreadyRegistered::class)
+        ->and(fn () => Passkeys::authenticate(recordingAssertion()))->toThrow(CredentialNotFound::class);
+
+    Event::assertNotDispatched(PasskeyRegistered::class);
+    Event::assertNotDispatched(PasskeyAuthenticated::class);
 });
 
 it('builds the fake from the container', function (): void {

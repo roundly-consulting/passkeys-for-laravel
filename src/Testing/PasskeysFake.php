@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Passkeys\Testing;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Crypto\Codec\Base64Url;
 use RoundlyConsulting\Crypto\Codec\InvalidEncodingException;
@@ -20,6 +21,8 @@ use RoundlyConsulting\Passkeys\DataTransferObjects\RegistrationOptionsOverrides;
 use RoundlyConsulting\Passkeys\DataTransferObjects\RequestOptionsData;
 use RoundlyConsulting\Passkeys\Enums\AttestationConveyance;
 use RoundlyConsulting\Passkeys\Enums\UserVerification;
+use RoundlyConsulting\Passkeys\Events\PasskeyAuthenticated;
+use RoundlyConsulting\Passkeys\Events\PasskeyRegistered;
 use RoundlyConsulting\Passkeys\Exceptions\CredentialNotFound;
 use RoundlyConsulting\Passkeys\Exceptions\InvalidClientData;
 use RoundlyConsulting\Passkeys\Exceptions\PasskeyAssertionFailed;
@@ -34,6 +37,12 @@ use RoundlyConsulting\Passkeys\UserPasskeys;
  * and NO challenge check — ceremony outcomes are programmable and every
  * register() / authenticate() is recorded so a host can assert its passkey
  * enrolment and login flow without reproducing authenticator crypto.
+ *
+ * The side effects stay real: a successful register() stores the credential and
+ * fires `PasskeyRegistered`; a successful authenticate() stamps `last_used_at` and
+ * fires `PasskeyAuthenticated` — through the container's event dispatcher, so the
+ * host's listeners run unless the test wraps them in `Event::fake()`. A programmed
+ * failure writes and fires nothing. A revoked (or unsaved) passkey is refused.
  *
  * `rename()` / `revoke()` run the real, ownership-checked actions (writes and
  * events included) and are recorded once they succeed. Reads (`all`, `find`,
@@ -208,8 +217,8 @@ final class PasskeysFake implements PasskeyService
     }
 
     /**
-     * Persist a factory credential for `for($user)->register()`, recorded — or
-     * throw the programmed exception.
+     * Persist a factory credential for `for($user)->register()` and fire
+     * `PasskeyRegistered`, recorded — or throw the programmed exception.
      *
      * @internal called by the recording handle
      */
@@ -227,6 +236,8 @@ final class PasskeysFake implements PasskeyService
         ]);
 
         $user->passkeys()->save($passkey);
+
+        $this->container->make(Dispatcher::class)->dispatch(new PasskeyRegistered($passkey));
 
         $this->registrations[] = ['user' => $user, 'passkey' => $passkey, 'name' => $name];
 
@@ -250,7 +261,8 @@ final class PasskeysFake implements PasskeyService
     }
 
     /**
-     * The programmed authentication outcome, recorded.
+     * The programmed authentication outcome, recorded; a success stamps usage and
+     * fires `PasskeyAuthenticated`.
      *
      * @internal called by the recording handle
      */
@@ -268,6 +280,8 @@ final class PasskeysFake implements PasskeyService
 
         // Stamped like a real sign-in (`last_used_at`); the counter is not moved.
         $passkey->recordUsage($passkey->backup_state);
+
+        $this->container->make(Dispatcher::class)->dispatch(new PasskeyAuthenticated($passkey));
 
         $this->authentications[] = ['passkey' => $passkey, 'success' => true];
 

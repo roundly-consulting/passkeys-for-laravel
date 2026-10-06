@@ -19,6 +19,10 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 - `Passkeys::fake()`: a fake `register()` now stores the passkey with `last_used_at` `null`, as a
   real registration does, and a successful fake `authenticate()` stamps `last_used_at`. A test that
   read a fresh fake passkey as "used" will notice.
+- `Passkeys::fake()`: a successful fake `register()` / `authenticate()` now dispatches
+  `PasskeyRegistered` / `PasskeyAuthenticated` through the app's event dispatcher, as the real
+  ceremonies do, so your listeners run in tests that use the fake. Wrap the test in `Event::fake()`
+  if your listeners must not run. A programmed failure dispatches nothing.
 
 ### Fixed
 
@@ -38,6 +42,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
   key can't sign in.
 - `Passkeys::fake()` now tracks `last_used_at` like the real ceremonies, so a "last used" display can
   be tested under the fake.
+- `Passkeys::fake()` now fires the registration and authentication events, so a host's listener (for
+  example a "new passkey added" mail) can be tested under the fake.
 
 ## 1.0.2 - 2026-10-04
 
