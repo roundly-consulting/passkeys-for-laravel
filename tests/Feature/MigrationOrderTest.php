@@ -69,7 +69,7 @@ it('publishes its migrations timestamp-injected into the host', function (): voi
  */
 it('applies the published order cleanly on postgres', function () use ($migrations): void {
     expect($migrations)->toApplyOnConnection('pgsql', migrations: 2);
-})->skip(fn (): bool => ! test()->connectionAvailable('pgsql'), 'pgsql connection not available');
+})->skip(fn (): bool => ! test()->connectionAvailable('pgsql'), 'pgsql connection not available')->group('pgsql');
 
 /**
  * The driver-truth pin: the env-declared driver against what the connection itself answers.

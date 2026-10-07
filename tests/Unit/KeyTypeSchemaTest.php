@@ -74,7 +74,7 @@ it('emits a bigint authenticatable morph byte-identical to raw morphs()', functi
 
     Schema::dropIfExists('kt_ident_passkeys');
     Schema::dropIfExists('authenticatable_raw_ref');
-})->skip($sqliteOnly, 'sqlite_master is the sqlite catalog');
+})->skip($sqliteOnly, 'sqlite_master is the sqlite catalog')->group('sqlite');
 
 /**
  * The headline of P1: a uuid/ulid host gets uuid/ulid authenticatable columns; bigint stays
@@ -95,7 +95,7 @@ it('renders each configured key type as a distinct real column type', function (
     'bigint' => ['bigint', 'bigint'],
     'uuid' => ['uuid', 'uuid'],
     'ulid' => ['ulid', 'character(26)'],
-])->skip($pgsqlOnly, 'needs the postgres catalog to tell the key types apart');
+])->skip($pgsqlOnly, 'needs the postgres catalog to tell the key types apart')->group('pgsql');
 
 it('refuses to migrate on an unrecognized key type instead of falling back to bigint', function (): void {
     config()->set('passkeys.key_type', 'nonsense');

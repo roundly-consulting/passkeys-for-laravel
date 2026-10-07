@@ -103,3 +103,58 @@ jobs:
         # Coverage is enforced on the sqlite matrix; this is a correctness leg, and
         # re-measuring it doubles the slowest job for no signal.
         run: vendor/bin/pest --ci
+
+  test-mysql:
+    runs-on: ubuntu-latest
+    name: P8.4 - mysql real-engine
+
+    # The docs promise MySQL or PostgreSQL; this is the leg that makes the MySQL half true.
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_USER: testing
+          MYSQL_PASSWORD: secret
+          MYSQL_ROOT_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.4
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, mysql, pdo_mysql, bcmath, soap, intl, fileinfo, openssl, sodium
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-stable --prefer-dist --no-interaction
+
+      - name: Execute tests against mysql
+        env:
+          # As on the pgsql leg, TESTING_DB_DRIVER is what moves the suite off sqlite; the
+          # location vars alone would leave this job running sqlite under a mysql name.
+          #
+          # This leg runs passkeys' two migrations -- the CREATE and the ALTER, whose
+          # `->after()` column placement only MySQL executes -- on InnoDB, with its utf8mb4
+          # index-width limits and a real json column for `transports`. It also builds the
+          # host tables' `passkeyUserHandle()` column: nullable AND unique, which MySQL
+          # allows to hold many NULLs, so lazily minted handles never collide.
+          TESTING_DB_DRIVER: mysql
+          TESTING_DB_HOST: 127.0.0.1
+          TESTING_DB_PORT: 3306
+          TESTING_DB_DATABASE: testing
+          TESTING_DB_USERNAME: testing
+          TESTING_DB_PASSWORD: secret
+        # The sqlite- and postgres-catalog probes belong to their own legs; excluding them
+        # keeps this leg at zero skipped cases, so a skip here always means something.
+        run: vendor/bin/pest --ci --exclude-group=sqlite --exclude-group=pgsql
