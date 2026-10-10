@@ -35,19 +35,28 @@ arch('src only uses allowed vendor roots')
         '__',
     ]);
 
+// Each vendor is named by its real PSR-4 root(s): Pest resolves a name only through an
+// autoload root at or above it. A bare `Spomky`, `ParagonIE` or `lbuchs` (packages rooted at
+// `SpomkyLabs\Pki\`, `ParagonIE\ConstantTime\`, `lbuchs\WebAuthn\`, …) and `web-auth`
+// (a Composer vendor, not a namespace — its namespaces are the `Webauthn` / `Cose` roots)
+// matched nothing even with the vendor installed — measured with a simulated install.
 arch('no forbidden crypto, cbor, or webauthn vendors are imported')
     ->expect([
         'Webauthn',
         'Cose',
         'CBOR',
-        'Spomky',
+        'SpomkyLabs\\Pki',
         'Base64Url\\',
-        'ParagonIE',
+        'ParagonIE\\ConstantTime',
+        'ParagonIE\\Sodium',
+        'ParagonIE\\Halite',
+        'ParagonIE\\Paseto',
+        'ParagonIE\\CipherSweet',
         'phpseclib',
         'phpseclib3',
+        'phpseclib4',
         'Firebase\\JWT',
-        'lbuchs',
-        'web-auth',
+        'lbuchs\\WebAuthn',
     ])
     ->not->toBeUsed();
 
