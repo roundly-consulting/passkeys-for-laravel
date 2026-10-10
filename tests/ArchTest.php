@@ -35,30 +35,24 @@ arch('src only uses allowed vendor roots')
         '__',
     ]);
 
-// Each vendor is named by its real PSR-4 root(s): Pest resolves a name only through an
-// autoload root at or above it. A bare `Spomky`, `ParagonIE` or `lbuchs` (packages rooted at
-// `SpomkyLabs\Pki\`, `ParagonIE\ConstantTime\`, `lbuchs\WebAuthn\`, …) and `web-auth`
-// (a Composer vendor, not a namespace — its namespaces are the `Webauthn` / `Cose` roots)
-// matched nothing even with the vendor installed — measured with a simulated install.
-arch('no forbidden crypto, cbor, or webauthn vendors are imported')
-    ->expect([
-        'Webauthn',
-        'Cose',
-        'CBOR',
-        'SpomkyLabs\\Pki',
-        'Base64Url\\',
-        'ParagonIE\\ConstantTime',
-        'ParagonIE\\Sodium',
-        'ParagonIE\\Halite',
-        'ParagonIE\\Paseto',
-        'ParagonIE\\CipherSweet',
-        'phpseclib',
-        'phpseclib3',
-        'phpseclib4',
-        'Firebase\\JWT',
-        'lbuchs\\WebAuthn',
-    ])
-    ->not->toBeUsed();
+// The allow-list above already bans every other vendor; this names the ones it must never
+// reach, as a source-token scan rather than `->not->toBeUsed()`: Pest resolves a name only
+// through an installed PSR-4 root at or above it, so a bare vendor prefix missed its sibling
+// packages and an uninstalled vendor matched nothing. `web-auth` is a Composer vendor; its
+// namespaces are the `Webauthn` / `Cose` roots.
+ArchPresets::noVendorNamespace([
+    'Webauthn',
+    'Cose',
+    'CBOR',
+    'SpomkyLabs',
+    'Base64Url',
+    'ParagonIE',
+    'phpseclib',
+    'phpseclib3',
+    'phpseclib4',
+    'Firebase\JWT',
+    'lbuchs',
+], __DIR__.'/../src');
 
 /*
  * Primitives belong to crypto-for-laravel: CBOR/COSE decoding, ECDSA DER↔raw,
