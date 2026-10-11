@@ -104,14 +104,14 @@ it('accepts every trust level now that the ladder is real', function (string $tr
     ]);
 
     expect($config->attestationTrust->value)->toBe($trust);
-})->with(['ignore', 'self', 'basic']);
+})->with(['ignore' => 'ignore', 'self' => 'self', 'basic' => 'basic']);
 
 it('refuses to demand attestation while telling authenticators not to send any', function (string $trust): void {
     PasskeyConfig::fromArray([
         'attestation' => 'none',
         'attestation_trust' => $trust,
     ]);
-})->throws(InvalidConfiguration::class, 'PASSKEYS_ATTESTATION=direct')->with(['self', 'basic']);
+})->throws(InvalidConfiguration::class, 'PASSKEYS_ATTESTATION=direct')->with(['self' => 'self', 'basic' => 'basic']);
 
 it('leaves the default posture alone: ignore with none conveyance is fine', function (): void {
     $config = PasskeyConfig::fromArray(['attestation' => 'none', 'attestation_trust' => 'ignore']);
