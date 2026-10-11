@@ -6,10 +6,13 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+## 1.1.2 - 2026-10-11
+
 ### Changed
 
 - Maintenance: requires the latest roundly packages — package-toolkit `^1.3.0`, crypto `^1.1.2`,
   enums `^1.1.0`; dev: testing `^1.2.1`.
+- Maintenance: CI also runs the test suite against MySQL 8, alongside SQLite and PostgreSQL.
 
 ## 1.1.1 - 2026-10-06
 
