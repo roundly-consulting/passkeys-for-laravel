@@ -247,6 +247,7 @@ ArchPresets::swappableModelsAreNotFinal([
  * Eloquent model behind a `*_model`-style key, every call site going through the seam.
  */
 ArchPresets::modelsResolveThroughSeam(__DIR__.'/../src', 'Support', ['passkeys.model']);
+ArchPresets::factoriesResolveThroughSeam(__DIR__.'/../database/factories', __DIR__.'/../src', 'Support');
 
 /**
  * The morph-key seam, guarded. The passkeys table reaches its polymorphic subject column
