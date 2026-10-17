@@ -118,7 +118,7 @@ it('keeps PHPStan out of the runtime: only src/PHPStan names it', function () us
         }
 
         $scanned++;
-        expect($code)->not->toContain('PHPStan\\', $file->getPathname());
+        expect(str_contains($code, 'PHPStan\\'))->toBeFalse($file->getPathname());
     }
 
     expect($scanned)->toBeGreaterThan(10);
