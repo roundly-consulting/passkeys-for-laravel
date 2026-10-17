@@ -6,6 +6,8 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ## Unreleased
 
+## 1.1.3 - 2026-10-17
+
 ### Fixed
 
 - Larastan / PHPStan now knows the `$table->passkeyUserHandle(): ColumnDefinition` schema macro.
