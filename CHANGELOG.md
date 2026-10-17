@@ -10,9 +10,11 @@ All notable changes to `passkeys-for-laravel` are documented in this file. The f
 
 ### Fixed
 
-- Larastan / PHPStan now knows the `$table->passkeyUserHandle(): ColumnDefinition` schema macro.
-  A macro only exists once the provider boots, which static analysis never does, so a migration
-  calling it failed with "Call to an undefined method". The package ships a PHPStan extension that
+- Larastan / PHPStan now knows the `$table->passkeyUserHandle(): ColumnDefinition` schema macro. A
+  macro only exists once its provider boots. Larastan boots an auto-discovering host app and usually
+  finds it, but not where the provider isn't booted during analysis (package development under
+  Testbench, `dont-discover`, a provider registered by hand) — there a migration calling it failed
+  with "Call to an undefined method". The package ships a PHPStan extension that
   `phpstan/extension-installer` loads automatically (`extra.phpstan.includes`); without the
   installer, include `vendor/roundly-consulting/passkeys-for-laravel/extension.neon`.
 
