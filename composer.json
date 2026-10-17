@@ -39,7 +39,7 @@
         "nunomaduro/collision": "^8.0",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^4.0",
-        "roundly-consulting/testing-for-laravel": "^1.2.1"
+        "roundly-consulting/testing-for-laravel": "^1.5.0"
     },
     "suggest": {
         "ext-sodium": "Enables optional Ed25519 (EdDSA / COSE -8) signature verification."
