@@ -1,6 +1,7 @@
 includes:
     - vendor/larastan/larastan/extension.neon
     - vendor/roundly-consulting/package-toolkit-for-laravel/extension.neon
+    - extension.neon
 parameters:
     level: 7
     paths:
@@ -8,6 +9,8 @@ parameters:
         - database
         - config
         - tests/Support/User.php
+        # A host migration calling the schema macro: proves it is declared for Larastan.
+        - tests/PHPStan
     # This package ships its own config/ dir; env() is correct there.
     configDirectories:
         - config

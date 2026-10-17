@@ -1,0 +1,5 @@
+services:
+    -
+        class: RoundlyConsulting\Passkeys\PHPStan\PasskeyMacrosExtension
+        tags:
+            - phpstan.broker.methodsClassReflectionExtension

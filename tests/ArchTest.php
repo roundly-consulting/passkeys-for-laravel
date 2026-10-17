@@ -33,7 +33,10 @@ arch('src only uses allowed vendor roots')
         'database_path',
         'now',
         '__',
-    ]);
+    ])
+    // The Larastan macro declaration may use PHPStan's namespace: only PHPStan ever loads it.
+    // tests/Unit/PHPStan pins what it imports and that no other src file names PHPStan.
+    ->ignoring('RoundlyConsulting\Passkeys\PHPStan');
 
 // The allow-list above already bans every other vendor; this names the ones it must never
 // reach, as a source-token scan rather than `->not->toBeUsed()`: Pest resolves a name only
