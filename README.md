@@ -25,7 +25,7 @@ model, a challenge store and events, and your application wires its own endpoint
 
 ## Installation
 
-Requires PHP 8.4 (`ext-json`; `ext-sodium` for EdDSA keys) and Laravel 12 or 13.
+Requires PHP 8.4 (`ext-json`; `ext-sodium` for EdDSA keys) and Laravel 13.
 
 ```bash
 composer require roundly-consulting/passkeys-for-laravel
