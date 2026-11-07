@@ -66,12 +66,13 @@ final class CborEncoder
     {
         $prefix = $major << 5;
 
+        // Each head is one byte (major type in the top 3 bits); the masks state that for chr().
         return match (true) {
-            $value < 24 => chr($prefix | $value),
-            $value < 0x100 => chr($prefix | 24).chr($value),
-            $value < 0x10000 => chr($prefix | 25).pack('n', $value),
-            $value < 0x100000000 => chr($prefix | 26).pack('N', $value),
-            default => chr($prefix | 27).pack('J', $value),
+            $value < 24 => chr(($prefix | $value) & 0xFF),
+            $value < 0x100 => chr(($prefix | 24) & 0xFF).chr($value & 0xFF),
+            $value < 0x10000 => chr(($prefix | 25) & 0xFF).pack('n', $value),
+            $value < 0x100000000 => chr(($prefix | 26) & 0xFF).pack('N', $value),
+            default => chr(($prefix | 27) & 0xFF).pack('J', $value),
         };
     }
 }

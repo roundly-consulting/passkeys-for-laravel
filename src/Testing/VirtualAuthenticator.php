@@ -151,7 +151,7 @@ final class VirtualAuthenticator
 
     private function authenticatorData(string $optionsRpId, int $flags, int $signCount): string
     {
-        return (new Digest)->raw($this->rpId ?? $optionsRpId).chr($flags).pack('N', $signCount);
+        return (new Digest)->raw($this->rpId ?? $optionsRpId).chr($flags & 0xFF).pack('N', $signCount);
     }
 
     private function clientDataJson(string $type, string $challenge): string
